@@ -15,6 +15,7 @@ function getEnvVar(name: string): string {
 
 const ALCHEMY_API_KEY = getEnvVar("ALCHEMY_API_KEY");
 const PRIVATE_KEY = getEnvVar("PRIVATE_KEY");
+const ETHERSCAN_API_KEY = getEnvVar("ETHERSCAN_API_KEY");
 
 const config: HardhatUserConfig = {
   solidity: "0.8.28",
@@ -25,6 +26,9 @@ const config: HardhatUserConfig = {
       accounts: [PRIVATE_KEY],
     },
   },
+  etherscan: {
+    apiKey: ETHERSCAN_API_KEY
+  }
 };
 
 export default config;
