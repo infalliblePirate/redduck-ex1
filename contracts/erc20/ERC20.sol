@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 pragma solidity ^0.8.9;
 
-contract ERC20 is IERC20 {
+contract ERC20 is IERC20, IERC20Metadata {
     uint8 internal _decimals;
     uint256 internal _supply;
     string internal _name;
@@ -23,6 +24,18 @@ contract ERC20 is IERC20 {
         _name = name;
         _symbol = symbol;
         _balanceOf[msg.sender] = _supply;
+    }
+
+    function name() external view override returns (string memory) {
+        return _name;
+    }
+
+    function symbol() external view override returns (string memory) {
+        return _symbol;
+    }
+
+    function decimals() external view override returns (uint8) {
+        return _decimals;
     }
 
     function totalSupply() external view returns (uint256) {
