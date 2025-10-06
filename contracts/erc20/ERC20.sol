@@ -15,15 +15,12 @@ contract ERC20 is IERC20, IERC20Metadata {
 
     constructor(
         uint8 decimals,
-        uint256 supply,
         string memory name,
         string memory symbol
     ) {
         _decimals = decimals;
-        _supply = supply * 10 ** decimals;
         _name = name;
         _symbol = symbol;
-        _balanceOf[msg.sender] = _supply;
     }
 
     function name() external view override returns (string memory) {
