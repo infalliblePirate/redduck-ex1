@@ -30,7 +30,6 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
         _decimals = decimals;
         _name = name;
         _symbol = symbol;
-        uint256 supply = initialSupply * 10 ** decimals;
     }
 
     function name() external view override returns (string memory) {
