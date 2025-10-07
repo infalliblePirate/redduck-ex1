@@ -16,11 +16,14 @@ contract ERC20 is IERC20, IERC20Metadata {
     constructor(
         uint8 decimals,
         string memory name,
-        string memory symbol
+        string memory symbol,
+        uint256 initialSupply
     ) {
         _decimals = decimals;
         _name = name;
         _symbol = symbol;
+        uint256 supply = initialSupply * 10 ** decimals;
+        _mint(address(this), supply);
     }
 
     function name() external view override returns (string memory) {
@@ -94,5 +97,20 @@ contract ERC20 is IERC20, IERC20Metadata {
         _balanceOf[to] += value;
 
         emit Transfer(from, to, value);
+    }
+
+    function _mint(address to, uint256 value) internal {
+        require(to != address(0), "The receipient is a zero address");
+        _balanceOf[to] += value;
+        _supply += value;
+        emit Transfer(address(0), to, value);
+    }
+
+    function _burn(address from, uint256 value) internal {
+        require(from != address(0), "The sender is a zero address");
+        require(_balanceOf[from] >= value, "The burn amount exceeds balance");
+        _balanceOf[from] -= value;
+        _supply -= value;
+        emit Transfer(from, address(0), value);
     }
 }
