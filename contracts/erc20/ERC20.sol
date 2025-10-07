@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 pragma solidity ^0.8.9;
 
-contract ERC20 is IERC20, IERC20Metadata {
+contract ERC20 is IERC20, IERC20Metadata, Ownable {
     uint8 internal _decimals;
     uint256 internal _supply;
     string internal _name;
@@ -13,17 +14,23 @@ contract ERC20 is IERC20, IERC20Metadata {
     mapping(address => uint256) internal _balanceOf;
     mapping(address => mapping(address => uint256)) internal _allowances;
 
+    address internal _minter;
+
+    modifier onlyMinter() {
+        require(msg.sender == _minter, "Not authorized");
+        _;
+    }
+
     constructor(
         uint8 decimals,
         string memory name,
         string memory symbol,
         uint256 initialSupply
-    ) {
+    ) Ownable(msg.sender) {
         _decimals = decimals;
         _name = name;
         _symbol = symbol;
         uint256 supply = initialSupply * 10 ** decimals;
-        _mint(address(this), supply);
     }
 
     function name() external view override returns (string memory) {
@@ -61,6 +68,18 @@ contract ERC20 is IERC20, IERC20Metadata {
     function approve(address spender, uint256 value) external returns (bool) {
         _approve(msg.sender, spender, value);
         return true;
+    }
+
+    function setMinter(address minter) external onlyOwner {
+        _minter = minter;
+    }
+
+    function mint(address to, uint256 value) external onlyMinter {
+        _mint(to, value);
+    }
+
+    function burn(address from, uint256 value) external onlyMinter {
+        _burn(from, value);
     }
 
     function _approve(address owner, address spender, uint256 value) internal {
