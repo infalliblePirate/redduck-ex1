@@ -24,8 +24,7 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
     constructor(
         uint8 decimals,
         string memory name,
-        string memory symbol,
-        uint256 initialSupply
+        string memory symbol
     ) Ownable(msg.sender) {
         _decimals = decimals;
         _name = name;

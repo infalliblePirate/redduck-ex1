@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "hardhat test"
   },
   "keywords": [],
   "author": "",
@@ -11,7 +11,10 @@
   "description": "",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
+    "chai": "^4.5.0",
     "hardhat": "^2.26.3",
+    "mocha": "^11.7.4",
+    "typechain": "^8.3.2",
     "typescript": "^5.9.3"
   },
   "dependencies": {
