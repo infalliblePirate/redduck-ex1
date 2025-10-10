@@ -8,7 +8,8 @@ describe('ERC20 test', () => {
     const expectedName = 'Penguin';
     const expectedSymbol = 'PNGN';
     const expectedDecimals = 6;
-    const expectedSupply = hre.ethers.parseUnits("1000", expectedDecimals)
+    const expectedSupply = hre.ethers.parseUnits("1000", expectedDecimals);
+    const expectedApprovedBalance = hre.ethers.parseUnits("1", expectedDecimals);
 
     const setup = async (): Promise<ERC20Setup> => {
         const [deployer, user] = await hre.ethers.getSigners();
@@ -52,25 +53,24 @@ describe('ERC20 test', () => {
             const zeroSigner = await hre.ethers.getSigner(hre.ethers.ZeroAddress);
 
             await expect(token.connect(zeroSigner).getFunction('approve')
-                .staticCall(user, hre.ethers.parseEther("0.000001"))).to.be.revertedWith("The sender is a zero address");
+                .staticCall(user, expectedApprovedBalance)).to.be.revertedWith("The sender is a zero address");
 
             await expect(
-                token.approve(hre.ethers.ZeroAddress, hre.ethers.parseEther("0.000001"))
+                token.approve(hre.ethers.ZeroAddress, expectedApprovedBalance)
             ).to.be.revertedWith("The receipient is a zero address");
         })
 
         it('should return true and update allowance', async () => {
             const { deployer, user, token } = await setup();
-            const amount = hre.ethers.parseEther("0.000001");
 
             const result = await token.getFunction('approve')
-                .staticCall(user, amount);
+                .staticCall(user, expectedApprovedBalance);
             expect(result).to.eq(true);
 
-            const tx = await token.approve(user, amount);
+            const tx = await token.approve(user, expectedApprovedBalance);
             await tx.wait();
 
-            expect(await token.allowance(deployer, user)).to.eq(amount);
+            expect(await token.allowance(deployer, user)).to.eq(expectedApprovedBalance);
         });
     });
 
