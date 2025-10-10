@@ -46,4 +46,33 @@ describe('ERC20 test', () => {
         });
     });
 
+    describe('Approve', () => {
+        it('should revert upon approving zero addresses', async () => {
+            const { user, token } = await setup();
+            const zeroSigner = await hre.ethers.getSigner(hre.ethers.ZeroAddress);
+
+            await expect(token.connect(zeroSigner).getFunction('approve')
+                .staticCall(user, hre.ethers.parseEther("0.000001"))).to.be.revertedWith("The sender is a zero address");
+
+            await expect(
+                token.approve(hre.ethers.ZeroAddress, hre.ethers.parseEther("0.000001"))
+            ).to.be.revertedWith("The receipient is a zero address");
+        })
+
+        it('should return true and update allowance', async () => {
+            const { deployer, user, token } = await setup();
+            const amount = hre.ethers.parseEther("0.000001");
+
+            const result = await token.getFunction('approve')
+                .staticCall(user, amount);
+            expect(result).to.eq(true);
+
+            const tx = await token.approve(user, amount);
+            await tx.wait();
+
+            expect(await token.allowance(deployer, user)).to.eq(amount);
+        });
+    });
+
+
 });
