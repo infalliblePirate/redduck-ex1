@@ -1,7 +1,8 @@
 import { ERC20 } from '../typechain-types';
+import { Signer } from "ethers";
 
 export type ERC20Setup = {
-    deployer: string,
-    user: string,
+    deployer: Signer,
+    user: Signer,
     token: ERC20,
 };

@@ -20,8 +20,8 @@ describe('ERC20 test', () => {
         await erc20.mint(deployer, expectedSupply);
 
         return {
-            deployer: deployer.address,
-            user: user.address,
+            deployer: deployer,
+            user: user,
             token: erc20,
         }
     };
@@ -87,7 +87,7 @@ describe('ERC20 test', () => {
                 token.transfer(hre.ethers.ZeroAddress, expectedApprovedBalance)
             ).to.be.revertedWith("The receipient is a zero address");
 
-            await expect(token.connect(await hre.ethers.getSigner(user)).transfer(deployer, expectedApprovedBalance)
+            await expect(token.connect(user).transfer(deployer, expectedApprovedBalance)
             ).to.be.revertedWith("The transferable value exceeds balance");
         });
 
@@ -120,10 +120,10 @@ describe('ERC20 test', () => {
             await expect(token.approve(user, expectedApprovedBalance)).emit(token, 'Approval')
                 .withArgs(deployer, user, expectedApprovedBalance);
 
-            expect(await token.connect(await hre.ethers.getSigner(user)).getFunction('transferFrom')
+            expect(await token.connect(user).getFunction('transferFrom')
                 .staticCall(deployer, user, expectedApprovedBalance,)).to.eq(true);
 
-            await expect(token.connect(await hre.ethers.getSigner(user)).transferFrom(deployer, user, expectedApprovedBalance))
+            await expect(token.connect(user).transferFrom(deployer, user, expectedApprovedBalance))
                 .emit(token, 'Approval')
                 .withArgs(deployer, user, 0)
                 .emit(token, 'Transfer')
