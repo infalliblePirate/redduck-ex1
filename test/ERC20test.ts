@@ -60,15 +60,16 @@ describe('ERC20 test', () => {
             ).to.be.revertedWith("The receipient is a zero address");
         });
 
-        it('should return true and update allowance', async () => {
+        it('should return true, update allowance emit Approval event', async () => {
             const { deployer, user, token } = await setup();
 
             const result = await token.getFunction('approve')
                 .staticCall(user, expectedApprovedBalance);
             expect(result).to.eq(true);
 
-            const tx = await token.approve(user, expectedApprovedBalance);
-            await tx.wait();
+            await expect(token.approve(user, expectedApprovedBalance))
+                .emit(token, 'Approval')
+                .withArgs(deployer, user, expectedApprovedBalance);
 
             expect(await token.allowance(deployer, user)).to.eq(expectedApprovedBalance);
         });
