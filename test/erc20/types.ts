@@ -1,4 +1,4 @@
-import { ERC20 } from '../typechain-types';
+import { ERC20 } from '../../typechain-types';
 import { Signer } from "ethers";
 
 export type ERC20Setup = {

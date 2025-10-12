@@ -1,5 +1,5 @@
 import { expect } from 'chai';
-import { ERC20__factory } from '../typechain-types';
+import { ERC20__factory } from '../../typechain-types';
 
 import hre from 'hardhat';
 import { ERC20Setup } from './types';
