@@ -10,11 +10,9 @@ contract ERC20Exchange is IExchangable, Ownable {
     ERC20 internal _token;
 
     uint256 internal _price;
-    uint8 internal _percetageFee; 
+    uint8 internal _percetageFee;
     uint256 internal _accumulatedFee;
     uint16 private constant FEE_DENOMINATOR = 10_000;
-
-    uint256 internal _ethReserve;
 
     constructor(
         address erc20,
@@ -24,7 +22,7 @@ contract ERC20Exchange is IExchangable, Ownable {
         require(erc20 != address(0), "The token is a zero address");
         require(price_ > 0, "The price must be a positive number");
         require(
-            percentageFee > 0 && percentageFee < FEE_DENOMINATOR,
+            percentageFee >= 0 && percentageFee < FEE_DENOMINATOR,
             "The fee is out of range"
         );
         _token = ERC20(erc20);
@@ -32,8 +30,16 @@ contract ERC20Exchange is IExchangable, Ownable {
     }
 
     function addLiquidity(
-        uint256 tokenSupply
-    ) external payable override onlyOwner returns (bool) {
+        uint256 tokenAmount
+    ) external payable override onlyOwner {
+        require(tokenAmount > 0, "The inital supply must be a positive number");
+        uint256 value = msg.value;
+        require(value > 0, "The ether reserve must be a positive number");
+
+        uint256 supply = tokenAmount;
+        _token.mint(address(this), supply);
+
+        emit LiquidityChanged(msg.sender, value, tokenAmount);
     }
 
     function price() external view override returns (uint256) {
@@ -50,15 +56,12 @@ contract ERC20Exchange is IExchangable, Ownable {
     }
 
     function buy() external payable override returns (bool) {
-        
     }
 
-    function sell(uint256 value) external override returns (bool) {
-        
-    }
+    function sell(uint256 value) external override returns (bool) {}
 
     function liquidity() external view override returns (uint256, uint256) {
-        return (_ethReserve, _token.balanceOf(address(this)));
+        return (payable(address(this)).balance, _token.balanceOf(address(this)));
     }
 
     function fee() external override returns (uint8) {}

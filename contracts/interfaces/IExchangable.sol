@@ -26,7 +26,7 @@ interface IExchangable {
 
     function sell(uint256 value) external returns (bool);
 
-    function addLiquidity(uint256 tokenSupply) external payable returns (bool);
+    function addLiquidity(uint256 tokenSupply) external payable;
 
     function liquidity() external view returns (uint256, uint256);
 
