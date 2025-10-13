@@ -57,7 +57,7 @@ describe('ERC20 test', () => {
 
             await expect(
                 token.approve(hre.ethers.ZeroAddress, expectedApprovedBalance)
-            ).to.be.revertedWith("The receipient is a zero address");
+            ).to.be.revertedWith("The recipient is a zero address");
         });
 
         it('should return true, update allowance emit Approval event', async () => {
@@ -85,7 +85,7 @@ describe('ERC20 test', () => {
 
             await expect(
                 token.transfer(hre.ethers.ZeroAddress, expectedApprovedBalance)
-            ).to.be.revertedWith("The receipient is a zero address");
+            ).to.be.revertedWith("The recipient is a zero address");
 
             await expect(token.connect(user).transfer(deployer, expectedApprovedBalance)
             ).to.be.revertedWith("The transferable value exceeds balance");
@@ -101,10 +101,10 @@ describe('ERC20 test', () => {
                 .withArgs(deployer, user, expectedApprovedBalance);
 
             const senderBalance = await token.balanceOf(deployer);
-            const receipientBalance = await token.balanceOf(user);
+            const recipientBalance = await token.balanceOf(user);
 
             expect(senderBalance).to.eq(expectedSupply - expectedApprovedBalance);
-            expect(receipientBalance).to.eq(expectedApprovedBalance);
+            expect(recipientBalance).to.eq(expectedApprovedBalance);
         });
     });
 
@@ -132,6 +132,74 @@ describe('ERC20 test', () => {
             expect(await token.allowance(deployer, user)).to.eq(0);
             expect(await token.balanceOf(deployer)).to.eq(expectedSupply - expectedApprovedBalance);
             expect(await token.balanceOf(user)).to.eq(expectedApprovedBalance);
+        });
+    });
+
+    describe('Mint', () => {
+        it('should revert', async () => {
+            const { deployer, user, token } = await setup();
+
+            await expect(token.mint(hre.ethers.ZeroAddress, expectedSupply))
+                .to.be.revertedWith("The recipient is a zero address");
+
+            await expect(token.connect(user).mint(deployer, expectedSupply))
+                .to.be.reverted;
+            await expect(token.mint(deployer, 0))
+                .to.be.revertedWith("Mint amount must be greater than 0");
+        });
+        it('should mint tokens, update supply, emit Transfer event', async () => {
+            const { user, token } = await setup();
+
+            const userBalanceBefore = await token.balanceOf(user);
+            const supplyBefore = await token.totalSupply();
+
+            await expect(token.mint(user, expectedSupply))
+                .to.emit(token, 'Transfer')
+                .withArgs(hre.ethers.ZeroAddress, user, expectedSupply);
+
+            const userBalanceAfter = await token.balanceOf(user);
+            const supplyAfter = await token.totalSupply();
+
+            expect(userBalanceAfter - userBalanceBefore)
+                .to.eq(expectedSupply);
+            expect(supplyAfter - supplyBefore)
+                .to.eq(expectedSupply);
+        });
+    });
+
+    describe('Burn', () => {
+        it('should revert', async () => {
+            const { deployer, user, token } = await setup();
+
+            await expect(token.burn(hre.ethers.ZeroAddress, expectedSupply))
+                .to.be.revertedWith("The sender is a zero address");
+            await expect(token.connect(user).burn(deployer, expectedSupply))
+                .to.be.reverted;
+            await expect(token.burn(deployer, 0))
+                .to.be.revertedWith("Burn amount must be greater than 0");
+
+            const exceededSupply = expectedSupply * 2n;
+            await expect(token.burn(deployer, exceededSupply))
+                .to.be.revertedWith("The burn amount exceeds balance");
+        });
+
+        it('should burn tokens, update supply, emit Transfer event', async () => {
+            const { deployer, token } = await setup();
+
+            const deployerBalanceBefore = await token.balanceOf(deployer);
+            const supplyBefore = await token.totalSupply();
+
+            await expect(token.burn(deployer, expectedSupply))
+                .to.emit(token, 'Transfer')
+                .withArgs(deployer, hre.ethers.ZeroAddress, expectedSupply);
+
+            const deployerBalanceAfter = await token.balanceOf(deployer);
+            const supplyAfter = await token.totalSupply();
+
+            expect(deployerBalanceBefore - deployerBalanceAfter)
+                .to.eq(expectedSupply);
+            expect(supplyBefore - supplyAfter)
+                .to.eq(expectedSupply);
         });
     });
 });
