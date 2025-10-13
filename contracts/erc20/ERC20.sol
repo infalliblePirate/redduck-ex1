@@ -69,6 +69,7 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
     }
 
     function setMinter(address minter) external onlyOwner {
+        require(minter != address(0), "Minter cannot be zero address");
         _minter = minter;
     }
 
@@ -82,7 +83,7 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
 
     function _approve(address owner, address spender, uint256 value) internal {
         require(owner != address(0), "The sender is a zero address");
-        require(spender != address(0), "The receipient is a zero address");
+        require(spender != address(0), "The recipient is a zero address");
 
         _allowances[owner][spender] = value;
         emit Approval(owner, spender, value);
@@ -105,7 +106,7 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
 
     function _transfer(address from, address to, uint256 value) internal {
         require(from != address(0), "The sender is a zero address");
-        require(to != address(0), "The receipient is a zero address");
+        require(to != address(0), "The recipient is a zero address");
         require(
             _balanceOf[from] >= value,
             "The transferable value exceeds balance"
@@ -117,7 +118,8 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
     }
 
     function _mint(address to, uint256 value) internal {
-        require(to != address(0), "The receipient is a zero address");
+        require(to != address(0), "The recipient is a zero address");
+        require(value > 0, "Mint amount must be greater than 0");
         _balanceOf[to] += value;
         _supply += value;
         emit Transfer(address(0), to, value);
@@ -125,6 +127,7 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
 
     function _burn(address from, uint256 value) internal {
         require(from != address(0), "The sender is a zero address");
+        require(value > 0, "Burn amount must be greater than 0");
         require(_balanceOf[from] >= value, "The burn amount exceeds balance");
         _balanceOf[from] -= value;
         _supply -= value;
