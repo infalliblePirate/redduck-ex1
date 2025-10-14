@@ -9,6 +9,7 @@ interface IExchangable {
         uint256 spentEth,
         uint256 feeInTokens
     );
+
     event Sell(
         address seller,
         uint256 tokensSold,
@@ -20,6 +21,12 @@ interface IExchangable {
         address initiator,
         uint256 ethAmount,
         uint256 tokenAmount
+    );
+
+    event WeeklyBurn(
+        address sender,
+        uint256 burnAmount,
+        uint256 timestamp
     );
 
     function buy() external payable returns (bool);
@@ -34,11 +41,13 @@ interface IExchangable {
 
     function setPrice(uint256) external returns (bool);
 
-    function fee() external returns (uint8);
+    function fee() external view returns (uint8);
 
     function setFee(uint8) external returns (bool);
 
     function accumulatedFee() external returns (uint256);
 
     function resetLiquidity(address to) external returns (bool);
+
+    function weeklyBurnFee() external returns (bool);
 }

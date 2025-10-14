@@ -14,6 +14,9 @@ contract ERC20Exchange is IExchangable, Ownable {
     uint256 internal _accumulatedFee;
     uint16 private constant FEE_DENOMINATOR = 10_000;
 
+    uint256 public lastBurnTimestamp;
+    uint256 constant BURN_INTERVAL = 7 days;
+
     constructor(
         address erc20,
         uint256 price_,
@@ -28,6 +31,7 @@ contract ERC20Exchange is IExchangable, Ownable {
         _token = ERC20(erc20);
         _price = price_;
         _feeBasisPoints = feeBasisPoints;
+        lastBurnTimestamp = block.timestamp;
     }
 
     function addLiquidity(
@@ -100,9 +104,9 @@ contract ERC20Exchange is IExchangable, Ownable {
         );
     }
 
-    function fee() external override onlyOwner returns (uint8) {}
+    function fee() external override onlyOwner view returns (uint8) {}
 
-    function setFee(uint8) external override onlyOwner returns (bool) {}
+    function setFee(uint8) external override onlyOwner returns (bool) {} // change the fucking name
 
     function accumulatedFee()
         external
@@ -114,9 +118,22 @@ contract ERC20Exchange is IExchangable, Ownable {
         return _accumulatedFee;
     }
 
-    function resetLiquidity(address to) external override onlyOwner returns (bool) {
+    function resetLiquidity(
+        address to
+    ) external override onlyOwner returns (bool) {
         _token.transfer(to, _token.balanceOf(address(this)));
         payable(msg.sender).transfer(payable(address(this)).balance);
         return true;
+    }
+
+    function weeklyBurnFee() external override onlyOwner returns (bool) {
+        require(
+            block.timestamp >= lastBurnTimestamp + BURN_INTERVAL,
+            "Burn not available yet"
+        );
+        lastBurnTimestamp = block.timestamp;
+        _token.burn(address(this), _accumulatedFee);
+        emit WeeklyBurn(msg.sender, _accumulatedFee, block.timestamp);
+        _accumulatedFee = 0;
     }
 }
