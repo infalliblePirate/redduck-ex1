@@ -3,6 +3,7 @@ import hre from "hardhat";
 import { ERC20Exchange__factory } from "../../typechain-types";
 import { ERC20__factory } from "../../typechain-types";
 import { ERC20ExchangeSetup } from "./types";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe('ERC20Exchange test', () => {
     const FEE_DENOMINATOR: bigint = 10_000n;
@@ -19,6 +20,8 @@ describe('ERC20Exchange test', () => {
     const tradeEthAmount = hre.ethers.parseEther("0.000001");
     const insufficientEthAmount = hre.ethers.parseUnits("0.1", decimals);
     const excessiveTradeEthAmount = expectedSupply * expectedPrice + 1n;
+
+    const SEVEN_DAYS = 7 * 24 * 60 * 60;
 
     const setup = async (): Promise<ERC20ExchangeSetup> => {
         const [deployer, user] = await hre.ethers.getSigners();
@@ -97,10 +100,10 @@ describe('ERC20Exchange test', () => {
             const [exchangeEthBefore, exchangeTokenBefore] = await exchange.liquidity();
             const userTokensBefore = await token.balanceOf(user);
 
-            expect(await exchange.getFunction('buy').staticCall({ value: expectedPrice }))
+            expect(await exchange.getFunction('buy').staticCall({ value: tradeEthAmount }))
                 .to.eq(true);
 
-            const tx = await exchange.connect(user).buy({ value: expectedPrice });
+            const tx = await exchange.connect(user).buy({ value: tradeEthAmount });
             const receipt = (await tx.wait())!;
 
             const gasUsed = receipt.gasUsed;
@@ -111,8 +114,8 @@ describe('ERC20Exchange test', () => {
             const [exchangeEthAfter, exchangeTokenAfter] = await exchange.liquidity();
             const userTokenAfter = await token.balanceOf(user);
 
-            expect(userEthBefore - expectedPrice).to.be.closeTo(userEthAfter + gasCost, 12n);
-            expect(exchangeEthAfter - expectedPrice).to.eq(exchangeEthBefore);
+            expect(userEthBefore - tradeEthAmount).to.be.closeTo(userEthAfter + gasCost, 12n);
+            expect(exchangeEthAfter - tradeEthAmount).to.eq(exchangeEthBefore);
 
             const tokens = tradeEthAmount * 10n ** await token.decimals() / expectedPrice;
             const fee = tokens * expectedFeeBasisPoints / FEE_DENOMINATOR;
@@ -148,7 +151,7 @@ describe('ERC20Exchange test', () => {
         it('should first buy, then sell the bought amount, update the token, eth balance, emit Sell event', async () => {
             const { user, exchange, token } = await setup();
 
-            const buyTx = await exchange.connect(user).buy({ value: expectedPrice });
+            const buyTx = await exchange.connect(user).buy({ value: tradeEthAmount });
             const buyReceipt = (await buyTx.wait())!;
 
             const eventTopic = exchange.interface.getEvent('Buy').topicHash;
@@ -190,6 +193,45 @@ describe('ERC20Exchange test', () => {
 
             await expect(sellTx).to.emit(exchange, 'Sell')
                 .withArgs(user, tokensSoldAfterFee, tradedEth, fee);
+        });
+    });
+
+    describe('Weekly burn fee', () => {
+        it('should burn accumulated fee after 7 days and reset fee', async () => {
+            const { deployer, user, exchange } = await setup();
+
+            await exchange.connect(user).buy({ value: tradeEthAmount });
+            const accumulatedFeeBefore = await exchange.accumulatedFee();
+            expect(accumulatedFeeBefore).to.not.eq(0);
+
+            await time.increase(SEVEN_DAYS);
+
+            const tx = await exchange.weeklyBurnFee();
+            const receipt = (await tx.wait())!;
+
+            const eventTopic = exchange.interface.getEvent('WeeklyBurn').topicHash;
+            const log = receipt?.logs.find((log) => log.topics[0] === eventTopic)!;
+
+            const parsed = exchange.interface.parseLog(log)!;
+            const [caller, burnAmount, timestamp] = parsed.args;
+
+            expect(caller).to.eq(deployer);
+            expect(burnAmount).to.eq(accumulatedFeeBefore);
+            expect(timestamp).to.be.closeTo(await time.latest(), 1);
+
+            const accumulatedFeeAfter = await exchange.accumulatedFee();
+            expect(accumulatedFeeAfter).to.eq(0);
+        });
+        it('should revert', async () => {
+            const { user, exchange } = await setup();
+
+            await exchange.connect(user).buy({ value: tradeEthAmount });
+
+            await expect(exchange.connect(user).weeklyBurnFee())
+                .to.be.reverted;
+
+            await expect(exchange.weeklyBurnFee())
+                .to.be.revertedWith("Burn not available yet");
         });
     });
 });
