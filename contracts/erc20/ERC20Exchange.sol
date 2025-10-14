@@ -64,7 +64,7 @@ contract ERC20Exchange is IExchangable, Ownable {
         uint256 tokensAfterFee = tokens - fee;
         require(tokensAfterFee > 0, "No sufficient funds to buy token");
         require(
-            _token.balanceOf(address(this)) >= tokensAfterFee,
+            _token.balanceOf(address(this)) >= tokensAfterFee + _accumulatedFee,
             "The number of requested tokens exceeds liquidity pool"
         );
         _token.transfer(msg.sender, tokensAfterFee);
