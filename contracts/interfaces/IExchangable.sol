@@ -41,9 +41,9 @@ interface IExchangable {
 
     function setPrice(uint256) external returns (bool);
 
-    function fee() external view returns (uint8);
+    function feeBasisPoints() external view returns (uint8);
 
-    function setFee(uint8) external returns (bool);
+    function setFeeBasisPoints(uint8) external returns (bool);
 
     function accumulatedFee() external returns (uint256);
 

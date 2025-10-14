@@ -104,9 +104,14 @@ contract ERC20Exchange is IExchangable, Ownable {
         );
     }
 
-    function fee() external override onlyOwner view returns (uint8) {}
+    function feeBasisPoints() external override onlyOwner view returns (uint8) {
+        return _feeBasisPoints;
+    }
 
-    function setFee(uint8) external override onlyOwner returns (bool) {} // change the fucking name
+    function setFeeBasisPoints(uint8 feeBP) external override onlyOwner returns (bool) {
+        _feeBasisPoints = feeBP;
+        return true;
+    }
 
     function accumulatedFee()
         external
