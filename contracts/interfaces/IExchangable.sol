@@ -39,4 +39,6 @@ interface IExchangable {
     function setFee(uint8) external returns (bool);
 
     function accumulatedFee() external returns (uint256);
+
+    function resetLiquidity(address to) external returns (bool);
 }

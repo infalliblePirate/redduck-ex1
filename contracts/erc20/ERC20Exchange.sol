@@ -73,7 +73,25 @@ contract ERC20Exchange is IExchangable, Ownable {
         return true;
     }
 
-    function sell(uint256 value) external override returns (bool) {}
+    function sell(uint256 value) external override returns (bool) {
+        require(
+            _token.balanceOf(msg.sender) >= value,
+            "The account does not that many tokens"
+        );
+        uint256 fee = (value * _feeBasisPoints) / FEE_DENOMINATOR;
+        uint256 soldTokens = value - fee;
+        uint256 ethToSend = (soldTokens * _price) / (10 ** _token.decimals());
+        _accumulatedFee += fee;
+        require(
+            ethToSend <= payable(address(this)).balance,
+            "The exchange does not have enough eth liquidity"
+        );
+        _token.transferFrom(msg.sender, address(this), value);
+        payable(msg.sender).transfer(ethToSend);
+
+        emit Sell(msg.sender, soldTokens, ethToSend, fee);
+        return true;
+    }
 
     function liquidity() external view override returns (uint256, uint256) {
         return (
@@ -94,5 +112,11 @@ contract ERC20Exchange is IExchangable, Ownable {
         returns (uint256)
     {
         return _accumulatedFee;
+    }
+
+    function resetLiquidity(address to) external override onlyOwner returns (bool) {
+        _token.transfer(to, _token.balanceOf(address(this)));
+        payable(msg.sender).transfer(payable(address(this)).balance);
+        return true;
     }
 }
