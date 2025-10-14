@@ -15,8 +15,8 @@ describe('ERC20Exchange test', () => {
     const expectedPrice = hre.ethers.parseEther("0.000001");
     const expectedAddedLiquidityEth = hre.ethers.parseEther("1");
     const expectedFeeBasisPoints: bigint = 10n;
-    
-    const tradeAmount = hre.ethers.parseEther("0.000001");
+
+    const tradeEthAmount = hre.ethers.parseEther("0.000001");
     const insufficientEthAmount = hre.ethers.parseUnits("0.1", decimals);
     const excessiveTradeEthAmount = expectedSupply * expectedPrice + 1n;
 
@@ -97,7 +97,7 @@ describe('ERC20Exchange test', () => {
             const [exchangeEthBefore, exchangeTokenBefore] = await exchange.liquidity();
             const userTokensBefore = await token.balanceOf(user);
 
-            expect(await exchange.getFunction('buy').staticCall({value: expectedPrice}))
+            expect(await exchange.getFunction('buy').staticCall({ value: expectedPrice }))
                 .to.eq(true);
 
             const tx = await exchange.connect(user).buy({ value: expectedPrice });
@@ -114,7 +114,7 @@ describe('ERC20Exchange test', () => {
             expect(userEthBefore - expectedPrice).to.be.closeTo(userEthAfter + gasCost, 12n);
             expect(exchangeEthAfter - expectedPrice).to.eq(exchangeEthBefore);
 
-            const tokens = tradeAmount * 10n ** await token.decimals() / expectedPrice;
+            const tokens = tradeEthAmount * 10n ** await token.decimals() / expectedPrice;
             const fee = tokens * expectedFeeBasisPoints / FEE_DENOMINATOR;
             const tokensAfterFee = tokens - fee;
 
@@ -123,7 +123,7 @@ describe('ERC20Exchange test', () => {
             expect(exchangeTokenBefore - exchangeTokenAfter).to.eq(tokensAfterFee);
 
             await expect(tx).to.emit(exchange, 'Buy')
-                .withArgs(user, tokensAfterFee, tradeAmount, fee);
+                .withArgs(user, tokensAfterFee, tradeEthAmount, fee);
         });
         it('should revert', async () => {
             const { user, exchange } = await setup();
@@ -132,6 +132,64 @@ describe('ERC20Exchange test', () => {
 
             await expect(exchange.connect(user).buy({ value: excessiveTradeEthAmount }))
                 .to.be.revertedWith("The number of requested tokens exceeds liquidity pool");
+        });
+    });
+
+    describe('Sell', () => {
+        it('should revert', async () => {
+            const { user, exchange } = await setup();
+            await expect(exchange.connect(user).sell(expectedSupply))
+                .to.be.revertedWith("The account does not that many tokens");
+            await exchange.resetLiquidity(user);
+            await expect(exchange.connect(user).sell(expectedSupply))
+                .to.be.revertedWith("The exchange does not have enough eth liquidity");
+        });
+
+        it('should first buy, then sell the bought amount, update the token, eth balance, emit Sell event', async () => {
+            const { user, exchange, token } = await setup();
+
+            const buyTx = await exchange.connect(user).buy({ value: expectedPrice });
+            const buyReceipt = (await buyTx.wait())!;
+
+            const eventTopic = exchange.interface.getEvent('Buy').topicHash;
+            const buyLog = buyReceipt?.logs.find((log) => log.topics[0] === eventTopic)!;
+
+            const parsed = exchange.interface.parseLog(buyLog)!;
+            const tokensBought = parsed.args.tokensBought;
+
+            const [exchangeEthBefore, exchangeTokenBefore] = await exchange.liquidity();
+            const userTokensBefore = await token.balanceOf(user);
+
+            const tokensToSell = tokensBought;
+            await token.connect(user).approve(exchange, tokensToSell);
+
+            expect(await exchange.connect(user).getFunction('sell').staticCall(tokensToSell))
+                .to.eq(true);
+
+            const userEthBefore = await hre.ethers.provider.getBalance(user);
+            const sellTx = await exchange.connect(user).sell(tokensToSell);
+            const receipt = (await sellTx.wait())!;
+
+            const gasUsed = receipt.gasUsed;
+            const gasPrice = sellTx.gasPrice;
+            const gasCost = gasUsed * gasPrice;
+
+            const userEthAfter = await hre.ethers.provider.getBalance(user);
+            const [exchangeEthAfter, exchangeTokensAfter] = await exchange.liquidity();
+            const userTokensAfter = await token.balanceOf(user);
+
+            const fee = tokensToSell * expectedFeeBasisPoints / FEE_DENOMINATOR;
+            const tokensSoldAfterFee = tokensToSell - fee;
+            const tradedEth = (tokensSoldAfterFee * expectedPrice) / (10n ** await token.decimals());
+
+            expect(userTokensBefore).to.eq(userTokensAfter + tokensToSell);
+            expect(exchangeTokensAfter).to.eq(exchangeTokenBefore + tokensToSell);
+
+            expect(userEthAfter + gasCost).to.eq(userEthBefore + tradedEth);
+            expect(exchangeEthBefore).to.eq(exchangeEthAfter + tradedEth);
+
+            await expect(sellTx).to.emit(exchange, 'Sell')
+                .withArgs(user, tokensSoldAfterFee, tradedEth, fee);
         });
     });
 });
