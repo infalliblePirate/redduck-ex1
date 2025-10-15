@@ -26,13 +26,15 @@ describe('ERC20VotingExchange test', () => {
 
     const tradeEthAmount = hre.ethers.parseEther("0.000001");
     const newSuggestedPrice = hre.ethers.parseEther("0.000002");
-
     const tokensToVote = (expectedSupply * VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
-    const tokensToSuggest =
-        (expectedSupply * PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
+    const tokensToSuggest = (expectedSupply * PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
-    const ethToVote = tokensToVote * expectedPrice / (10n ** decimals);
-    const ethToSuggest = tokensToSuggest * expectedPrice / (10n ** decimals);
+    // 1% to acount for the fee
+    const bufferMultiplier = 101n; 
+    const bufferDenominator = 100n;
+
+    const ethToSuggest = (tokensToSuggest * expectedPrice * bufferMultiplier) / ((10n ** decimals) * bufferDenominator);
+    const ethToVote = (tokensToVote * expectedPrice * bufferMultiplier) / ((10n ** decimals) * bufferDenominator);
 
     const setup = async (): Promise<ERC20VotingExchangeSetup> => {
         const [deployer, user] = await hre.ethers.getSigners();
@@ -123,8 +125,7 @@ describe('ERC20VotingExchange test', () => {
     });
 
     describe("Start voting", () => {
-        it("should start a new voting round, update isVotingActive, \
-             votingNumber, votingStartedTimeStamp, emit StartVoting event",
+        it("should start a new voting round, update isVotingActive, votingNumber, votingStartedTimeStamp, emit StartVoting event",
             async () => {
                 const { votingExchange, deployer } = await setup();
 
@@ -136,7 +137,7 @@ describe('ERC20VotingExchange test', () => {
                 expect(await votingExchange.votingStartedTimeStamp())
                     .to.be.closeTo(await time.latest(), 1);
             });
-        it("should revert", async () => {
+        it("should revert if non-owner starts voting", async () => {
             const { votingExchange, user } = await setup();
             await expect(votingExchange.connect(user).startVoting())
                 .to.be.reverted;
