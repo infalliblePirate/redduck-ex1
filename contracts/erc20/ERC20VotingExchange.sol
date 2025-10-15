@@ -9,7 +9,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     uint256 immutable TIME_TO_VOTE = 5 minutes;
     uint8 immutable PRICE_SUGGESTION_THRESHOLD_BPS = 10;
     uint8 immutable VOTE_THRESHOLD_BPS = 5;
-    uint16 immutable BPS_DENOMINATOR = 10000;
+    uint16 immutable BPS_DENOMINATOR = 10_000;
 
     bool _isVotingActive = false;
     uint256 _votingStartedTimeStamp;
@@ -71,7 +71,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             BPS_DENOMINATOR;
 
         require(
-            requiredSupply >= _token.balanceOf(msg.sender),
+            _token.balanceOf(msg.sender) >= requiredSupply,
             "The account cannot vote"
         );
         require(_pendingPriceVotes[price] > 0, "Price has not been suggested");
@@ -91,7 +91,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
         require(
-            requiredSupply >= _token.balanceOf(msg.sender),
+            _token.balanceOf(msg.sender) > requiredSupply,
             "The account cannot suggest price"
         );
         require(
