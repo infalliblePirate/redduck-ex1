@@ -60,8 +60,12 @@ contract ERC20Exchange is IExchangable, Ownable {
         return true;
     }
 
-    function buy() external payable override returns (bool) {
-        uint256 tokens = (msg.value * 10 ** _token.decimals()) / _price;
+    function buy() external payable virtual override returns (bool) {
+        return _buy(msg.value);
+    }
+
+    function _buy(uint256 value) internal returns (bool) {
+        uint256 tokens = (value * 10 ** _token.decimals()) / _price;
         uint256 fee = (tokens * _feeBasisPoints) / FEE_DENOMINATOR;
         _accumulatedFee += fee;
 
@@ -73,11 +77,15 @@ contract ERC20Exchange is IExchangable, Ownable {
         );
         _token.transfer(msg.sender, tokensAfterFee);
 
-        emit Buy(msg.sender, tokensAfterFee, msg.value, fee);
+        emit Buy(msg.sender, tokensAfterFee, value, fee);
         return true;
     }
 
-    function sell(uint256 value) external override returns (bool) {
+    function sell(uint256 value) external virtual override returns (bool) {
+        return _sell(value);
+    }
+
+    function _sell(uint256 value) internal returns (bool) {
         require(
             _token.balanceOf(msg.sender) >= value,
             "The account does not that many tokens"
@@ -104,11 +112,13 @@ contract ERC20Exchange is IExchangable, Ownable {
         );
     }
 
-    function feeBasisPoints() external override onlyOwner view returns (uint8) {
+    function feeBasisPoints() external view override onlyOwner returns (uint8) {
         return _feeBasisPoints;
     }
 
-    function setFeeBasisPoints(uint8 feeBP) external override onlyOwner returns (bool) {
+    function setFeeBasisPoints(
+        uint8 feeBP
+    ) external override onlyOwner returns (bool) {
         _feeBasisPoints = feeBP;
         return true;
     }
