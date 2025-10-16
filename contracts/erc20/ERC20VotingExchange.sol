@@ -16,7 +16,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     uint256 _votingNumber = 0;
 
     mapping(uint256 => mapping(address => bool)) _isBalanceLocked;
-    mapping(uint256 => uint256) _pendingPriceVotes;
+    mapping(uint256 => mapping(uint256 => uint256)) _pendingPriceVotes;
 
     constructor(
         address erc20,
@@ -47,7 +47,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         return _token.transfer(to, value);
     }
 
-    function startVoting() external override onlyOwner{
+    function startVoting() external override onlyOwner {
         require(_isVotingActive == false, "Another voting is pending");
         _isVotingActive = true;
         _votingStartedTimeStamp = block.timestamp;
@@ -74,11 +74,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             _token.balanceOf(msg.sender) >= requiredSupply,
             "The account cannot vote"
         );
-        require(_pendingPriceVotes[price] > 0, "Price has not been suggested");
+        require(_pendingPriceVotes[_votingNumber][price] > 0, "Price has not been suggested");
 
         _isBalanceLocked[_votingNumber][msg.sender] = true;
 
-        _pendingPriceVotes[price] += _token.balanceOf(msg.sender);
+        _pendingPriceVotes[_votingNumber][price] += _token.balanceOf(msg.sender);
     }
 
     function suggestNewPrice(uint256 price) external override {
@@ -95,12 +95,19 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "The account cannot suggest price"
         );
         require(
-            _pendingPriceVotes[price] == 0,
+            _pendingPriceVotes[_votingNumber][price] == 0,
             "Price has already been suggested"
         );
 
-        _pendingPriceVotes[price] = _token.balanceOf(msg.sender);
+        _pendingPriceVotes[_votingNumber][price] = _token.balanceOf(msg.sender);
         _isBalanceLocked[_votingNumber][msg.sender] = true;
+
+        emit PriceSuggested(
+            msg.sender,
+            _votingNumber,
+            price,
+            _token.balanceOf(msg.sender)
+        );
     }
 
     function endVoting() external override {
@@ -111,7 +118,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _isVotingActive = false;
     }
 
-    function votingNumber() external view onlyOwner override returns(uint256) {
+    function votingNumber() external view override onlyOwner returns (uint256) {
         return _votingNumber;
     }
 
@@ -119,7 +126,23 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         return _isVotingActive;
     }
 
-    function votingStartedTimeStamp() external view override onlyOwner returns (uint256) {
+    function pendingPriceVotes(
+        uint256 votingNumber_,
+        uint256 price_
+    ) external view onlyOwner returns (uint256) {
+        return _pendingPriceVotes[votingNumber_][price_];
+    }
+
+    function currentVotingNumber() external view  onlyOwner returns (uint256) {
+        return _votingNumber;
+    }
+    function votingStartedTimeStamp()
+        external
+        view
+        override
+        onlyOwner
+        returns (uint256)
+    {
         return _votingStartedTimeStamp;
     }
 }
