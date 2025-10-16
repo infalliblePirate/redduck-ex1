@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 pragma solidity ^0.8.9;
 
 contract ERC20 is IERC20, IERC20Metadata, Ownable {
-    uint8 internal _decimals;
+    uint8 internal immutable _decimals;
     uint256 internal _supply;
     string internal _name;
     string internal _symbol;
@@ -22,13 +22,13 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
     }
 
     constructor(
-        uint8 decimals,
-        string memory name,
-        string memory symbol
+        uint8 decimals_,
+        string memory name_,
+        string memory symbol_
     ) Ownable(msg.sender) {
-        _decimals = decimals;
-        _name = name;
-        _symbol = symbol;
+        _decimals = decimals_;
+        _name = name_;
+        _symbol = symbol_;
     }
 
     function name() external view override returns (string memory) {
