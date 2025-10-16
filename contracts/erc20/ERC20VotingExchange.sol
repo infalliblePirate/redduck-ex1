@@ -114,9 +114,30 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     function endVoting() external override {
         require(
-            block.timestamp > _votingStartedTimeStamp + TIME_TO_VOTE,
+            block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
             "Voting is still in progress"
         );
+
+        uint256 winningPrice = 0;
+        uint256 highestVotes = 0;
+
+        uint256[] storage prices = _suggestedPrices[_votingNumber];
+        for (uint256 i = 0; i < prices.length; i++) {
+            uint256 price = prices[i];
+            uint256 votes = _pendingPriceVotes[_votingNumber][price];
+            if (votes > highestVotes) {
+                highestVotes = votes;
+                winningPrice = price;
+            }
+        }
+
+        if (winningPrice > 0) {
+            _setPrice(winningPrice);
+        }
+
+        _votingStartedTimeStamp = 0;
+
+        emit EndVoting(_votingNumber, winningPrice);
     }
 
     function votingNumber() external view override onlyOwner returns (uint256) {
