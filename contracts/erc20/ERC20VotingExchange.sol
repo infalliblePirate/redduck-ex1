@@ -59,9 +59,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
     }
 
-    function vote(uint256 price) external override {
+    function vote(uint256 price) external onlyNotVoted override {
         require(_isVotingActive, "No active voting");
-
         require(
             block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
             "Cannot vote as the time has already passed"
@@ -69,16 +68,21 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         uint256 requiredSupply = (_token.totalSupply() * VOTE_THRESHOLD_BPS) /
             BPS_DENOMINATOR;
+        uint256 weight = _token.balanceOf(msg.sender);
 
         require(
-            _token.balanceOf(msg.sender) >= requiredSupply,
+            weight >= requiredSupply,
             "The account cannot vote"
         );
-        require(_pendingPriceVotes[_votingNumber][price] > 0, "Price has not been suggested");
+        require(
+            _pendingPriceVotes[_votingNumber][price] > 0,
+            "Price has not been suggested"
+        );
 
         _isBalanceLocked[_votingNumber][msg.sender] = true;
+        _pendingPriceVotes[_votingNumber][price] += weight;
 
-        _pendingPriceVotes[_votingNumber][price] += _token.balanceOf(msg.sender);
+        emit VoteCasted(msg.sender, _votingNumber, price, weight);
     }
 
     function suggestNewPrice(uint256 price) external override {
@@ -133,9 +137,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         return _pendingPriceVotes[votingNumber_][price_];
     }
 
-    function currentVotingNumber() external view  onlyOwner returns (uint256) {
+    function currentVotingNumber() external view onlyOwner returns (uint256) {
         return _votingNumber;
     }
+
     function votingStartedTimeStamp()
         external
         view
