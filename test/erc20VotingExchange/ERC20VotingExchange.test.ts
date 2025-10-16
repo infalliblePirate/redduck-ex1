@@ -8,7 +8,7 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe('ERC20VotingExchange test', () => {
 
-    const TIME_TO_VOTE = 5n * 60n; // 5 minutes in seconds
+    const TIME_TO_VOTE = 5n * 60n;
     const PRICE_SUGGESTION_THRESHOLD_BPS = 10n;
     const VOTE_THRESHOLD_BPS = 5n;
     const BPS_DENOMINATOR = 10000n;
@@ -30,7 +30,7 @@ describe('ERC20VotingExchange test', () => {
     const tokensToSuggest = (expectedSupply * PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
     // 1% to acount for the fee
-    const bufferMultiplier = 101n; 
+    const bufferMultiplier = 101n;
     const bufferDenominator = 100n;
 
     const ethToSuggest = (tokensToSuggest * expectedPrice * bufferMultiplier) / ((10n ** decimals) * bufferDenominator);
@@ -142,5 +142,70 @@ describe('ERC20VotingExchange test', () => {
             await expect(votingExchange.connect(user).startVoting())
                 .to.be.reverted;
         });
+    });
+
+    describe('Suggest price', () => {
+        it('should revert if user doesn\'t have enough balance or voting not started', async () => {
+            const { votingExchange, user } = await setup();
+
+            await expect(
+                votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
+            ).to.be.revertedWith("Cannot suggest the price as the time has already passed");
+
+            await votingExchange.startVoting();
+            await expect(
+                votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
+            ).to.be.revertedWith("The account cannot suggest price");
+        });
+
+        it("should allow to suggest price and emit PriceSuggested, updating state correctly", async () => {
+            const { votingExchange, user, token } = await setup();
+
+            await buyTokens(votingExchange, user, ethToSuggest);
+            const userBalance = await token.balanceOf(user);
+
+            await votingExchange.startVoting();
+            const votingNumber = await votingExchange.currentVotingNumber();
+
+            const tx = await votingExchange.connect(user).suggestNewPrice(newSuggestedPrice);
+            await expect(tx)
+                .to.emit(votingExchange, "PriceSuggested")
+                .withArgs(user, votingNumber, newSuggestedPrice, userBalance);
+            await tx.wait();
+
+            expect(await votingExchange.isVotingActive()).to.be.true;
+            const pendingVotes = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
+            expect(pendingVotes).to.equal(userBalance);
+        });
+
+
+        it('should revert because time has passed', async () => {
+            const { votingExchange, user } = await setup();
+
+            await buyTokens(votingExchange, user, ethToSuggest);
+            await votingExchange.startVoting();
+
+            await time.increase(TIME_TO_VOTE);
+
+            await expect(
+                votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
+            ).to.be.revertedWith("Cannot suggest the price as the time has already passed");
+        });
+
+        it('should revert if same price is suggested twice', async () => {
+            const { votingExchange, user } = await setup();
+
+            await buyTokens(votingExchange, user, ethToSuggest);
+            await votingExchange.startVoting();
+
+            await expect(
+                votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
+            ).to.emit(votingExchange, "PriceSuggested");
+
+            await expect(
+                votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
+            ).to.be.revertedWith("Price has already been suggested");
+        });
+
     });
 });
