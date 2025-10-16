@@ -17,7 +17,11 @@ interface IVotable {
         uint256 weight
     );
 
-    event StartVoting(address indexed caller, uint256 votingNumber, uint256 timestamp);
+    event StartVoting(
+        address indexed caller,
+        uint256 votingNumber,
+        uint256 timestamp
+    );
 
     event EndVoting();
 

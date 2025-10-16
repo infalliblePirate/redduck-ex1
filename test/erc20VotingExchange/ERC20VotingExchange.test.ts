@@ -133,7 +133,6 @@ describe('ERC20VotingExchange test', () => {
                 await expect(votingExchange.connect(deployer).startVoting())
                     .to.emit(votingExchange, "StartVoting");
 
-                expect(await votingExchange.isVotingActive()).to.be.true;
                 expect(await votingExchange.votingNumber()).to.eq(1);
                 expect(await votingExchange.votingStartedTimeStamp())
                     .to.be.closeTo(await time.latest(), 1);
@@ -173,8 +172,7 @@ describe('ERC20VotingExchange test', () => {
                 .to.emit(votingExchange, "PriceSuggested")
                 .withArgs(user, votingNumber, newSuggestedPrice, userBalance);
             await tx.wait();
-
-            expect(await votingExchange.isVotingActive()).to.be.true;
+            
             const pendingVotes = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
             expect(pendingVotes).to.equal(userBalance);
         });
@@ -205,7 +203,7 @@ describe('ERC20VotingExchange test', () => {
 
             await expect(
                 votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
-            ).to.be.revertedWith("Price has already been suggested");
+            ).to.be.revertedWith("The account has voted, cannot buy, sell or transfer");
         });
     });
 
@@ -214,7 +212,7 @@ describe('ERC20VotingExchange test', () => {
             const { votingExchange, user } = await setup();
 
             await expect(votingExchange.connect(user).vote(newSuggestedPrice))
-                .to.be.revertedWith("No active voting");
+                .to.be.revertedWith("Cannot vote as the time has already passed");
         });
 
         it("should revert if user balance below threshold", async () => {
@@ -256,8 +254,6 @@ describe('ERC20VotingExchange test', () => {
 
             const pendingVotesAfter = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
             expect(pendingVotesAfter - pendingVotesBefore).to.equal(userBalance);
-
-            expect(await votingExchange.isVotingActive()).to.be.true;
 
             await expect(votingExchange.connect(user).vote(newSuggestedPrice))
                 .to.be.revertedWith("The account has voted, cannot buy, sell or transfer");

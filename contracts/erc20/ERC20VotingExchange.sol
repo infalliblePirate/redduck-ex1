@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.9;
 
 import "./ERC20Exchange.sol";
 import "../interfaces/IVotable.sol";
 
 contract ERC20VotingExchange is IVotable, ERC20Exchange {
-    uint256 immutable TIME_TO_VOTE = 5 minutes;
-    uint8 immutable PRICE_SUGGESTION_THRESHOLD_BPS = 10;
-    uint8 immutable VOTE_THRESHOLD_BPS = 5;
-    uint16 immutable BPS_DENOMINATOR = 10_000;
+    uint256 public constant TIME_TO_VOTE = 5 minutes;
+    uint8 public constant PRICE_SUGGESTION_THRESHOLD_BPS = 10;
+    uint8 public constant VOTE_THRESHOLD_BPS = 5;
+    uint16 public constant BPS_DENOMINATOR = 10_000;
 
-    bool _isVotingActive = false;
-    uint256 _votingStartedTimeStamp;
-    uint256 _votingNumber = 0;
+    uint256 private _votingStartedTimeStamp;
+    uint256 private _votingNumber;
 
-    mapping(uint256 => mapping(address => bool)) _isBalanceLocked;
-    mapping(uint256 => mapping(uint256 => uint256)) _pendingPriceVotes;
+    mapping(uint256 => mapping(address => bool)) private _isBalanceLocked;
+    mapping(uint256 => mapping(uint256 => uint256)) private _pendingPriceVotes;
 
     constructor(
         address erc20,
@@ -48,8 +46,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function startVoting() external override onlyOwner {
-        require(_isVotingActive == false, "Another voting is pending");
-        _isVotingActive = true;
         _votingStartedTimeStamp = block.timestamp;
 
         unchecked {
@@ -59,8 +55,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
     }
 
-    function vote(uint256 price) external onlyNotVoted override {
-        require(_isVotingActive, "No active voting");
+    function vote(uint256 price) external override onlyNotVoted {
         require(
             block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
             "Cannot vote as the time has already passed"
@@ -70,10 +65,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             BPS_DENOMINATOR;
         uint256 weight = _token.balanceOf(msg.sender);
 
-        require(
-            weight >= requiredSupply,
-            "The account cannot vote"
-        );
+        require(weight >= requiredSupply, "The account cannot vote");
         require(
             _pendingPriceVotes[_votingNumber][price] > 0,
             "Price has not been suggested"
@@ -85,7 +77,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit VoteCasted(msg.sender, _votingNumber, price, weight);
     }
 
-    function suggestNewPrice(uint256 price) external override {
+    function suggestNewPrice(uint256 price) external override onlyNotVoted {
         require(
             block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
             "Cannot suggest the price as the time has already passed"
@@ -93,17 +85,14 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         uint256 requiredSupply = (_token.totalSupply() *
             PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
+        uint256 weight = _token.balanceOf(msg.sender);
 
-        require(
-            _token.balanceOf(msg.sender) > requiredSupply,
-            "The account cannot suggest price"
-        );
+        require(weight >= requiredSupply, "The account cannot suggest price");
         require(
             _pendingPriceVotes[_votingNumber][price] == 0,
             "Price has already been suggested"
         );
-
-        _pendingPriceVotes[_votingNumber][price] = _token.balanceOf(msg.sender);
+        _pendingPriceVotes[_votingNumber][price] += weight;
         _isBalanceLocked[_votingNumber][msg.sender] = true;
 
         emit PriceSuggested(
@@ -119,25 +108,26 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             block.timestamp > _votingStartedTimeStamp + TIME_TO_VOTE,
             "Voting is still in progress"
         );
-        _isVotingActive = false;
     }
 
     function votingNumber() external view override onlyOwner returns (uint256) {
         return _votingNumber;
     }
 
-    function isVotingActive() external view returns (bool) {
-        return _isVotingActive;
-    }
-
     function pendingPriceVotes(
         uint256 votingNumber_,
         uint256 price_
-    ) external view onlyOwner returns (uint256) {
+    ) external view override onlyOwner returns (uint256) {
         return _pendingPriceVotes[votingNumber_][price_];
     }
 
-    function currentVotingNumber() external view onlyOwner returns (uint256) {
+    function currentVotingNumber()
+        external
+        view
+        override
+        onlyOwner
+        returns (uint256)
+    {
         return _votingNumber;
     }
 
