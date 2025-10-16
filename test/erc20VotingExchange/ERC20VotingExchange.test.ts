@@ -137,7 +137,7 @@ describe('ERC20VotingExchange test', () => {
                 expect(await votingExchange.votingStartedTimeStamp())
                     .to.be.closeTo(await time.latest(), 1);
             });
-        it("should revert if non-owner starts voting", async () => {
+        it("should revert if non-owner starts voting or when we try to start aready pending", async () => {
             const { votingExchange, user } = await setup();
             await expect(votingExchange.connect(user).startVoting())
                 .to.be.reverted;
@@ -150,7 +150,7 @@ describe('ERC20VotingExchange test', () => {
 
             await expect(
                 votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
-            ).to.be.revertedWith("Cannot suggest the price as the time has already passed");
+            ).to.be.revertedWith("No active voting");
 
             await votingExchange.startVoting();
             await expect(
@@ -172,7 +172,7 @@ describe('ERC20VotingExchange test', () => {
                 .to.emit(votingExchange, "PriceSuggested")
                 .withArgs(user, votingNumber, newSuggestedPrice, userBalance);
             await tx.wait();
-            
+
             const pendingVotes = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
             expect(pendingVotes).to.equal(userBalance);
         });
@@ -188,7 +188,7 @@ describe('ERC20VotingExchange test', () => {
 
             await expect(
                 votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
-            ).to.be.revertedWith("Cannot suggest the price as the time has already passed");
+            ).to.be.revertedWith("No active voting");
         });
 
         it('should revert if same price is suggested twice', async () => {
@@ -212,7 +212,7 @@ describe('ERC20VotingExchange test', () => {
             const { votingExchange, user } = await setup();
 
             await expect(votingExchange.connect(user).vote(newSuggestedPrice))
-                .to.be.revertedWith("Cannot vote as the time has already passed");
+                .to.be.revertedWith("No active voting");
         });
 
         it("should revert if user balance below threshold", async () => {

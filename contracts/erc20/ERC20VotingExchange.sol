@@ -15,6 +15,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     mapping(uint256 => mapping(address => bool)) private _isBalanceLocked;
     mapping(uint256 => mapping(uint256 => uint256)) private _pendingPriceVotes;
+    mapping(uint256 => uint256[]) private _suggestedPrices;
 
     constructor(
         address erc20,
@@ -26,6 +27,15 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         require(
             !_isBalanceLocked[_votingNumber][msg.sender],
             "The account has voted, cannot buy, sell or transfer"
+        );
+        _;
+    }
+
+    modifier votingActive() {
+        require(
+            _votingStartedTimeStamp != 0 &&
+                block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
+            "No active voting"
         );
         _;
     }
@@ -47,7 +57,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     function startVoting() external override onlyOwner {
         _votingStartedTimeStamp = block.timestamp;
-
         unchecked {
             _votingNumber++;
         }
@@ -55,12 +64,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
     }
 
-    function vote(uint256 price) external override onlyNotVoted {
-        require(
-            block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
-            "Cannot vote as the time has already passed"
-        );
-
+    function vote(uint256 price) external override onlyNotVoted votingActive {
         uint256 requiredSupply = (_token.totalSupply() * VOTE_THRESHOLD_BPS) /
             BPS_DENOMINATOR;
         uint256 weight = _token.balanceOf(msg.sender);
@@ -77,12 +81,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit VoteCasted(msg.sender, _votingNumber, price, weight);
     }
 
-    function suggestNewPrice(uint256 price) external override onlyNotVoted {
-        require(
-            block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
-            "Cannot suggest the price as the time has already passed"
-        );
-
+    function suggestNewPrice(
+        uint256 price
+    ) external override onlyNotVoted votingActive {
         uint256 requiredSupply = (_token.totalSupply() *
             PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
         uint256 weight = _token.balanceOf(msg.sender);
@@ -92,7 +93,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             _pendingPriceVotes[_votingNumber][price] == 0,
             "Price has already been suggested"
         );
+
         _pendingPriceVotes[_votingNumber][price] += weight;
+        _suggestedPrices[_votingNumber].push(price);
         _isBalanceLocked[_votingNumber][msg.sender] = true;
 
         emit PriceSuggested(
