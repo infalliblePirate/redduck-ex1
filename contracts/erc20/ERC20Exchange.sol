@@ -55,7 +55,16 @@ contract ERC20Exchange is IExchangable, Ownable {
         return address(_token);
     }
 
-    function setPrice(uint256 price_) external override returns (bool) {
+    function setPrice(
+        uint256 price_
+    ) external override onlyOwner returns (bool) {
+        _price = price_;
+        return true;
+    }
+
+    function _setPrice(
+        uint256 price_
+    ) internal onlyOwner returns (bool) {
         _price = price_;
         return true;
     }
