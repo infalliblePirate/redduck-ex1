@@ -141,6 +141,10 @@ describe('ERC20VotingExchange test', () => {
             const { votingExchange, user } = await setup();
             await expect(votingExchange.connect(user).startVoting())
                 .to.be.reverted;
+
+            await votingExchange.startVoting();
+            await expect(votingExchange.startVoting())
+                .to.be.revertedWith("Voting already active");
         });
     });
 

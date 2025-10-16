@@ -56,6 +56,12 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function startVoting() external override onlyOwner {
+        require(
+            _votingStartedTimeStamp == 0 ||
+                block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
+            "Voting already active"
+        );
+        
         _votingStartedTimeStamp = block.timestamp;
         unchecked {
             _votingNumber++;
