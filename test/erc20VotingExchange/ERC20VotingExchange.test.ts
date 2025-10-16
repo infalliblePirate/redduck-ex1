@@ -21,7 +21,7 @@ describe('ERC20VotingExchange test', () => {
 
     const expectedSupply = hre.ethers.parseUnits("1000", decimals);
     const expectedPrice = hre.ethers.parseEther("0.000001");
-    const expectedLiquidityEth = hre.ethers.parseEther("1000");
+    const expectedLiquidityEth = hre.ethers.parseEther("10");
     const expectedFeeBP = 10n;
 
     const tradeEthAmount = hre.ethers.parseEther("0.000001");
@@ -73,6 +73,7 @@ describe('ERC20VotingExchange test', () => {
     };
 
     describe("Restrictions during voting", () => {
+
         it("should revert buy/sell/transfer after user voted", async () => {
             const { votingExchange, deployer, user, token } = await setup();
 
@@ -206,6 +207,93 @@ describe('ERC20VotingExchange test', () => {
                 votingExchange.connect(user).suggestNewPrice(newSuggestedPrice)
             ).to.be.revertedWith("Price has already been suggested");
         });
-
     });
+
+    describe("Vote", () => {
+        it("should revert if no active voting", async () => {
+            const { votingExchange, user } = await setup();
+
+            await expect(votingExchange.connect(user).vote(newSuggestedPrice))
+                .to.be.revertedWith("No active voting");
+        });
+
+        it("should revert if user balance below threshold", async () => {
+            const { votingExchange, user } = await setup();
+
+            await votingExchange.startVoting();
+
+            await expect(votingExchange.connect(user).vote(newSuggestedPrice))
+                .to.be.revertedWith("The account cannot vote");
+        });
+
+        it("should revert if price has not been suggested", async () => {
+            const { votingExchange, user } = await setup();
+
+            await buyTokens(votingExchange, user, ethToVote);
+            await votingExchange.startVoting();
+
+            await expect(votingExchange.connect(user).vote(newSuggestedPrice))
+                .to.be.revertedWith("Price has not been suggested");
+        });
+
+        it("should allow voting, lock balance, update pending votes, and emit VoteCast", async () => {
+            const { votingExchange, user, deployer, token } = await setup();
+
+            await buyTokens(votingExchange, deployer, ethToSuggest);
+            await buyTokens(votingExchange, user, ethToVote);
+
+            await votingExchange.startVoting();
+            const votingNumber = await votingExchange.currentVotingNumber();
+
+            await votingExchange.connect(deployer).suggestNewPrice(newSuggestedPrice);
+            const pendingVotesBefore = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
+            const userBalance = await token.balanceOf(user);
+
+            const tx = await votingExchange.connect(user).vote(newSuggestedPrice);
+            await expect(tx)
+                .to.emit(votingExchange, "VoteCasted")
+                .withArgs(user, votingNumber, newSuggestedPrice, userBalance);
+
+            const pendingVotesAfter = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
+            expect(pendingVotesAfter - pendingVotesBefore).to.equal(userBalance);
+
+            expect(await votingExchange.isVotingActive()).to.be.true;
+
+            await expect(votingExchange.connect(user).vote(newSuggestedPrice))
+                .to.be.revertedWith("The account has voted, cannot buy, sell or transfer");
+
+            await expect(votingExchange.connect(user).buy({ value: tradeEthAmount }))
+                .to.be.revertedWith("The account has voted, cannot buy, sell or transfer");
+
+            const tokens = await token.balanceOf(user);
+            await token.connect(user).approve(votingExchange, tokens);
+
+            await expect(votingExchange.connect(user).sell(tokens))
+                .to.be.revertedWith("The account has voted, cannot buy, sell or transfer");
+
+            await expect(votingExchange.connect(user).transfer(user, tokens))
+                .to.be.revertedWith("The account has voted, cannot buy, sell or transfer");
+        });
+
+        it("should allow multiple users to vote and accumulate votes correctly", async () => {
+            const { votingExchange, deployer, user, token } = await setup();
+
+            await buyTokens(votingExchange, deployer, ethToSuggest);
+            await buyTokens(votingExchange, user, ethToVote);
+
+            await votingExchange.startVoting();
+            const votingNumber = await votingExchange.currentVotingNumber();
+
+            await votingExchange.connect(deployer).suggestNewPrice(newSuggestedPrice);
+
+            const deployerBalance = await token.balanceOf(deployer);
+            const userBalance = await token.balanceOf(user);
+
+            await votingExchange.connect(user).vote(newSuggestedPrice);
+
+            const totalVotes = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
+            expect(totalVotes).to.equal(deployerBalance + userBalance);
+        });
+    });
+
 });
