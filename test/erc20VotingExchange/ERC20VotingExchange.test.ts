@@ -298,4 +298,104 @@ describe('ERC20VotingExchange test', () => {
         });
     });
 
+    describe("EndVoting", () => {
+        it("should revert if voting time not passed", async () => {
+            const { votingExchange } = await setup();
+
+            await votingExchange.startVoting();
+            await expect(votingExchange.endVoting()).to.be.revertedWith("Voting is still in progress");
+        });
+
+        it("should set winning price for single suggestion", async () => {
+            const { votingExchange, deployer } = await setup();
+
+            await buyTokens(votingExchange, deployer, ethToSuggest);
+
+            await votingExchange.startVoting();
+            const votingNumber = await votingExchange.currentVotingNumber();
+
+            await votingExchange.connect(deployer).suggestNewPrice(newSuggestedPrice);
+
+            await time.increase(TIME_TO_VOTE);
+
+            const tx = await votingExchange.endVoting();
+            const receipt = (await tx.wait())!;
+            const eventTopic = votingExchange.interface.getEvent('EndVoting').topicHash;
+            const endLog = receipt.logs.find((log) => log.topics[0] === eventTopic)!;
+            const parsed = votingExchange.interface.parseLog(endLog)!;
+
+            expect(parsed.args.votingNumber).to.equal(votingNumber);
+            expect(parsed.args.price).to.equal(newSuggestedPrice);
+        });
+
+        it("should pick price with highest votes when multiple suggestions exist", async () => {
+            const { votingExchange, deployer, user, token } = await setup();
+
+            const [_, __, user2, user3] = await hre.ethers.getSigners();
+
+            await buyTokens(votingExchange, deployer, ethToSuggest);
+            await buyTokens(votingExchange, user, ethToSuggest);
+            await buyTokens(votingExchange, user2, ethToVote);
+            await buyTokens(votingExchange, user3, ethToSuggest);
+
+            await votingExchange.startVoting();
+
+            const price1 = hre.ethers.parseEther("0.000003");
+            const price2 = hre.ethers.parseEther("0.000004");
+
+            await votingExchange.connect(deployer).suggestNewPrice(price1);
+            await votingExchange.connect(user).suggestNewPrice(price2);
+
+            await votingExchange.connect(user2).vote(price1);
+            await votingExchange.connect(user3).vote(price2);
+
+            await time.increase(TIME_TO_VOTE);
+
+            const tx = await votingExchange.endVoting();
+            const receipt = (await tx.wait())!;
+            const eventTopic = votingExchange.interface.getEvent('EndVoting').topicHash;
+            const endLog = receipt.logs.find((log) => log.topics[0] === eventTopic)!;
+            const parsed = votingExchange.interface.parseLog(endLog)!;
+
+            const deployerVotes = await token.balanceOf(deployer);
+            const userVotes = await token.balanceOf(user);
+            const user2Votes = await token.balanceOf(user2);
+            const user3Votes = await token.balanceOf(user3);
+
+            const expectedWinner = (deployerVotes + user2Votes) > (userVotes + user3Votes) ? price1 : price2;
+            expect(parsed.args?.price).to.equal(expectedWinner);
+        });
+
+        it("should emit 0 price if no suggestions were made", async () => {
+            const { votingExchange } = await setup();
+
+            await votingExchange.startVoting();
+            await time.increase(TIME_TO_VOTE);
+
+            const tx = await votingExchange.endVoting();
+            const receipt = (await tx.wait())!;
+            const eventTopic = votingExchange.interface.getEvent('EndVoting').topicHash;
+            const endLog = receipt.logs.find((log) => log.topics[0] === eventTopic)!;
+            const parsed = votingExchange.interface.parseLog(endLog)!;
+
+            expect(parsed.args.price).to.equal(0);
+        });
+
+        it("should allow to start a new voting round after ending previous", async () => {
+            const { votingExchange, deployer } = await setup();
+
+            await buyTokens(votingExchange, deployer, ethToSuggest);
+
+            await votingExchange.startVoting();
+            await votingExchange.connect(deployer).suggestNewPrice(newSuggestedPrice);
+            await time.increase(TIME_TO_VOTE);
+            await votingExchange.endVoting();
+
+            await expect(votingExchange.startVoting()).to.not.be.reverted;
+
+            const newVotingNumber = await votingExchange.currentVotingNumber();
+            expect(newVotingNumber).to.equal(2);
+        });
+    });
+
 });
