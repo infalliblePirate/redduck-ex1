@@ -47,6 +47,7 @@ describe('ERC20Exchange test', () => {
         it('should confirm inital state of program', async () => {
             const { exchange, token } = await setup();
             expect(await exchange.price()).to.eq(expectedPrice);
+            expect(await exchange.feeBasisPoints()).to.eq(expectedFeeBasisPoints);
             expect(await exchange.token()).to.eq(token);
         });
     });
