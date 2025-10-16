@@ -43,4 +43,8 @@ interface IVotable {
         uint256 votingNumber,
         uint256 price
     ) external view returns (uint256);
+
+    function getSuggestedPrices(
+        uint256 votingNumber_
+    ) external view returns (uint256[] memory);
 }

@@ -61,7 +61,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
             "Voting already active"
         );
-        
+
         _votingStartedTimeStamp = block.timestamp;
         unchecked {
             _votingNumber++;
@@ -148,5 +148,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         returns (uint256)
     {
         return _votingStartedTimeStamp;
+    }
+
+    function getSuggestedPrices(
+        uint256 votingNumber_
+    ) external view override returns (uint256[] memory) {
+        return _suggestedPrices[votingNumber_];
     }
 }

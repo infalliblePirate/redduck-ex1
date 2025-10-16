@@ -162,7 +162,7 @@ describe('ERC20VotingExchange test', () => {
             ).to.be.revertedWith("The account cannot suggest price");
         });
 
-        it("should allow to suggest price and emit PriceSuggested, updating state correctly", async () => {
+        it("should allow to suggest price and emit PriceSuggested, update state, prices correctly", async () => {
             const { votingExchange, user, token } = await setup();
 
             await buyTokens(votingExchange, user, ethToSuggest);
@@ -179,8 +179,10 @@ describe('ERC20VotingExchange test', () => {
 
             const pendingVotes = await votingExchange.pendingPriceVotes(votingNumber, newSuggestedPrice);
             expect(pendingVotes).to.equal(userBalance);
-        });
 
+            const suggestedPrices = await votingExchange.getSuggestedPrices(votingNumber);
+            expect(suggestedPrices).to.include(newSuggestedPrice);
+        });
 
         it('should revert because time has passed', async () => {
             const { votingExchange, user } = await setup();
