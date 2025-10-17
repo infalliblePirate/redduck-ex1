@@ -7,7 +7,7 @@ import "../interfaces/IExchangable.sol";
 import "../erc20/ERC20.sol";
 
 contract ERC20Exchange is IExchangable, Ownable {
-    ERC20 internal _token;
+    ERC20 internal immutable _token;
 
     uint256 internal _price;
     uint8 internal _feeBasisPoints;
@@ -20,17 +20,17 @@ contract ERC20Exchange is IExchangable, Ownable {
     constructor(
         address erc20,
         uint256 price_,
-        uint8 feeBasisPoints
+        uint8 feeBasisPoints_
     ) Ownable(msg.sender) {
         require(erc20 != address(0), "The token is a zero address");
         require(price_ > 0, "The price must be a positive number");
         require(
-            feeBasisPoints >= 0 && feeBasisPoints < FEE_DENOMINATOR,
+            feeBasisPoints_ >= 0 && feeBasisPoints_ < FEE_DENOMINATOR,
             "The fee is out of range"
         );
         _token = ERC20(erc20);
         _price = price_;
-        _feeBasisPoints = feeBasisPoints;
+        _feeBasisPoints = feeBasisPoints_;
         lastBurnTimestamp = block.timestamp;
     }
 

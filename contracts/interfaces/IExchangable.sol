@@ -4,27 +4,27 @@ pragma solidity ^0.8.9;
 
 interface IExchangable {
     event Buy(
-        address buyer,
+        address indexed buyer,
         uint256 tokensBought,
         uint256 spentEth,
         uint256 feeInTokens
     );
 
     event Sell(
-        address seller,
+        address indexed seller,
         uint256 tokensSold,
         uint256 sentEth,
         uint256 feeInTokens
     );
 
     event LiquidityChanged(
-        address initiator,
+        address indexed initiator,
         uint256 ethAmount,
         uint256 tokenAmount
     );
 
     event WeeklyBurn(
-        address sender,
+        address indexed sender,
         uint256 burnAmount,
         uint256 timestamp
     );
