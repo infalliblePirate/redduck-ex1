@@ -113,6 +113,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function endVoting() external override {
+        require(_votingStartedTimeStamp != 0, "No voting in progress");
         require(
             block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
             "Voting is still in progress"
