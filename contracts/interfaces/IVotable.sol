@@ -23,7 +23,7 @@ interface IVotable {
         uint256 timestamp
     );
 
-    event EndVoting();
+    event EndVoting(uint256 indexed votingNumber, uint256 price);
 
     function startVoting() external;
 
