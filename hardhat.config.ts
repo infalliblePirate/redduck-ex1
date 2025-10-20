@@ -1,8 +1,9 @@
+import dotenv from 'dotenv';
 import 'solidity-coverage';
 import { HardhatUserConfig } from 'hardhat/config';
+
 import '@nomicfoundation/hardhat-toolbox';
 import { getAlchemySepoliaUrl } from './helpers/alchemy.helpers';
-import dotenv from 'dotenv';
 
 dotenv.config();
 

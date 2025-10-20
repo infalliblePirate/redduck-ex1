@@ -1,9 +1,11 @@
+import { time } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
 import hre from 'hardhat';
+
+import { ERC20ExchangeSetup } from './types';
+
 import { ERC20Exchange__factory } from '../../typechain-types';
 import { ERC20__factory } from '../../typechain-types';
-import { ERC20ExchangeSetup } from './types';
-import { time } from '@nomicfoundation/hardhat-network-helpers';
 
 describe('ERC20Exchange test', () => {
   const FEE_DENOMINATOR: bigint = 10_000n;
@@ -190,12 +192,13 @@ describe('ERC20Exchange test', () => {
       const buyReceipt = (await buyTx.wait())!;
 
       const eventTopic = exchange.interface.getEvent('Buy').topicHash;
+
       const buyLog = buyReceipt?.logs.find(
         (log) => log.topics[0] === eventTopic,
-      )!;
+      );
 
-      const parsed = exchange.interface.parseLog(buyLog)!;
-      const tokensBought = parsed.args.tokensBought;
+      const parsed = exchange.interface.parseLog(buyLog!);
+      const tokensBought = parsed!.args.tokensBought;
 
       const [exchangeEthBefore, exchangeTokenBefore] =
         await exchange.liquidity();
@@ -255,10 +258,10 @@ describe('ERC20Exchange test', () => {
       const receipt = (await tx.wait())!;
 
       const eventTopic = exchange.interface.getEvent('WeeklyBurn').topicHash;
-      const log = receipt?.logs.find((log) => log.topics[0] === eventTopic)!;
+      const log = receipt.logs.find((log) => log.topics[0] === eventTopic);
+      const parsed = exchange.interface.parseLog(log!);
 
-      const parsed = exchange.interface.parseLog(log)!;
-      const [caller, burnAmount, timestamp] = parsed.args;
+      const [caller, burnAmount, timestamp] = parsed!.args;
 
       expect(caller).to.eq(deployer);
       expect(burnAmount).to.eq(accumulatedFeeBefore);

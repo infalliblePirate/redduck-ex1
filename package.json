@@ -3,22 +3,39 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "hardhat test"
+    "coverage": "hardhat coverage --solcoverjs .solcover.json",
+    "clean": "hardhat clean",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format:ts": "prettier \"**/*.{js,ts,json}\" --check",
+    "format:ts:fix": "prettier \"**/*.{js,ts,json}\" --write",
+    "format:sol": "prettier \"contracts/**/*.sol\" --check",
+    "format:sol:fix": "prettier \"contracts/**/*.sol\" --write",
+    "format:yml": "prettier \"**/*.{md, yml,yaml}\" --check",
+    "format:yml:fix": "prettier \"**/*.{md, yml,yaml}\" --write"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@eslint/js": "^9.38.0",
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "chai": "^4.5.0",
+    "eslint": "^9.38.0",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^15.15.0",
     "hardhat": "^2.26.3",
     "mocha": "^11.7.4",
     "prettier": "^3.6.2",
     "prettier-plugin-solidity": "^2.1.0",
     "solhint": "^6.0.1",
     "typechain": "^8.3.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.4.0",

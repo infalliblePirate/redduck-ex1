@@ -13,5 +13,6 @@
         "bracketSpacing": false
       }
     }
-  ]
+  ],
+  "plugins": ["prettier-plugin-solidity"]
 }

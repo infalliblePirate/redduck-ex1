@@ -1,8 +1,9 @@
 import { expect } from 'chai';
-import { ERC20__factory } from '../../typechain-types';
-
 import hre from 'hardhat';
+
 import { ERC20Setup } from './types';
+
+import { ERC20__factory } from '../../typechain-types';
 
 describe('ERC20 test', () => {
   const expectedName = 'Penguin';

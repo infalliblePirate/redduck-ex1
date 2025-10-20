@@ -1,14 +1,15 @@
+import { time } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
+import { Signer } from 'ethers';
 import hre from 'hardhat';
+
+import { ERC20VotingExchangeSetup } from './types';
+
 import {
   ERC20__factory,
   ERC20VotingExchange__factory,
   ERC20VotingExchange,
 } from '../../typechain-types';
-import { ERC20VotingExchangeSetup } from './types';
-import { Signer } from 'ethers';
-
-import { time } from '@nomicfoundation/hardhat-network-helpers';
 
 describe('ERC20VotingExchange test', () => {
   const TIME_TO_VOTE = 5n * 60n;
@@ -79,7 +80,7 @@ describe('ERC20VotingExchange test', () => {
     const receipt = (await tx.wait())!;
 
     const eventTopic = votingExchange.interface.getEvent('Buy').topicHash;
-    const buyLog = receipt?.logs.find((log) => log.topics[0] === eventTopic)!;
+    const buyLog = receipt.logs.find((log) => log.topics[0] === eventTopic)!;
 
     const parsed = votingExchange.interface.parseLog(buyLog)!;
     const tokensBought = parsed.args.tokensBought;
@@ -405,7 +406,9 @@ describe('ERC20VotingExchange test', () => {
     it('should pick price with highest votes when multiple suggestions exist', async () => {
       const { votingExchange, deployer, user, token } = await setup();
 
-      const [_, __, user2, user3] = await hre.ethers.getSigners();
+      const signers = await hre.ethers.getSigners();
+      const user2 = signers[2];
+      const user3 = signers[3];
 
       await buyTokens(votingExchange, deployer, ethToSuggest);
       await buyTokens(votingExchange, user, ethToSuggest);
