@@ -63,7 +63,7 @@ export default tseslint.config(
       'coverage/',
       'typechain-types',
       '*.config.js',
-      'crytic-export'
+      'crytic-export',
     ],
   },
 );
