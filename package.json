@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "prepare": "husky",
     "coverage": "hardhat coverage --solcoverjs .solcover.json",
     "clean": "hardhat clean",
     "compile": "hardhat compile",
@@ -15,16 +16,16 @@
     "format:ts:fix": "prettier \"**/*.{js,ts,json}\" --write",
     "format:sol": "prettier \"contracts/**/*.sol\" --check",
     "format:sol:fix": "prettier \"contracts/**/*.sol\" --write",
-    "format:yml": "prettier \"**/*.{md, yml,yaml}\" --check",
-    "format:yml:fix": "prettier \"**/*.{md, yml,yaml}\" --write",
-    "check-codestyle": "npm run lint:sol && npm run format:sol && npm run lint:ts && npm run format:ts && npm run format:yml",
-    "update-codestyle": "npm run lint:sol:fix && npm run format:sol:fix && npm run lint:ts:fix && npm run format:ts:fix && npm run format:yml:fix"
+    "check-codestyle": "npm run lint:sol && npm run format:sol && npm run lint:ts && npm run format:ts",
+    "update-codestyle": "npm run lint:sol:fix && npm run format:sol:fix && npm run lint:ts:fix && npm run format:ts:fix"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
     "@eslint/js": "^9.38.0",
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "chai": "^4.5.0",
@@ -33,6 +34,7 @@
     "eslint-plugin-import": "^2.32.0",
     "globals": "^15.15.0",
     "hardhat": "^2.26.3",
+    "husky": "^9.1.7",
     "mocha": "^11.7.4",
     "prettier": "^3.6.2",
     "prettier-plugin-solidity": "^2.1.0",

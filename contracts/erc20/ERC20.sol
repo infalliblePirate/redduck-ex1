@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 /**
  * @title ERC20
  * @notice Custom ERC20 token implementation with minting and burning capabilities
- * @author Kateryna Pavlenko 
+ * @author Kateryna Pavlenko
  */
 contract ERC20 is IERC20, IERC20Metadata, Ownable {
     /// @notice Number of decimal places for token amounts

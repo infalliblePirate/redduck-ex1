@@ -7,7 +7,7 @@ import "../interfaces/IVotable.sol";
 /**
  * @title ERC20VotingExchange
  * @notice Extended ERC20Tradable contract with ability to vote for a price change
- * @author Kateryna Pavlenko 
+ * @author Kateryna Pavlenko
  */
 
 contract ERC20VotingExchange is IVotable, ERC20Exchange {
