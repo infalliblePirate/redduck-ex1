@@ -56,21 +56,15 @@ interface IVotable {
      */
     event EndVoting(uint256 indexed votingNumber, uint256 price);
 
+    event ResultChallenged(uint256, uint256, address);
+    event VotingFinalized(uint256, uint256);
+
     /**
      * @notice Start a new voting round
      * @dev Only callable by owner. Cannot start if a voting round is already active
      * @dev Increments voting number and sets the voting start timestamp
      */
     function startVoting() external;
-
-    /**
-     * @notice Suggest a new price for the token
-     * @dev Caller must hold at least PRICE_SUGGESTION_THRESHOLD_BPS of total supply
-     * @dev Price must not have been suggested in current voting round
-     * @dev Locks caller's tokens until voting ends
-     * @param price Suggested price in wei per token
-     */
-    function suggestNewPrice(uint256 price) external;
 
     /**
      * @notice Vote for an already suggested price
@@ -80,14 +74,6 @@ interface IVotable {
      * @param price Price to vote for
      */
     function vote(uint256 price) external;
-
-    /**
-     * @notice End the current voting round and apply the winning price
-     * @dev Can only be called after TIME_TO_VOTE has elapsed
-     * @dev Sets the exchange price to the price with the highest votes
-     * @dev If no votes, price remains unchanged
-     */
-    function endVoting() external;
 
     /**
      * @notice Get the current voting round number
@@ -111,18 +97,6 @@ interface IVotable {
     function currentVotingNumber() external view returns (uint256);
 
     /**
-     * @notice Get the total votes for a specific price in a voting round
-     * @dev Only callable by owner
-     * @param votingNumber_ Voting round number to query
-     * @param price Price to check votes for
-     * @return totalVotes Sum of all voting weights for the specified price
-     */
-    function pendingPriceVotes(
-        uint256 votingNumber_,
-        uint256 price
-    ) external view returns (uint256);
-
-    /**
      * @notice Get all suggested prices for a specific voting round
      * @param votingNumber_ Voting round number to query
      * @return prices Array of all suggested prices in that round
@@ -130,4 +104,8 @@ interface IVotable {
     function getSuggestedPrices(
         uint256 votingNumber_
     ) external view returns (uint256[] memory);
+
+    function challengeResult(uint256 claimedWinningPrice) external;
+
+    function finalizeVoting() external;
 }

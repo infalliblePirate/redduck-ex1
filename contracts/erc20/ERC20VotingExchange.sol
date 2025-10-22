@@ -34,18 +34,22 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev Increments with each new voting session
     uint256 private _votingNumber;
 
-    /// @notice Tracks whether an address has participated in a specific voting round
-    /// @dev votingNumber => address => hasVoted
-    /// @dev Prevents double voting and locks tokens during active voting
-    mapping(uint256 => mapping(address => bool)) private _isBalanceLocked;
-
-    /// @notice Total voting weight for each price suggestion in each round
-    /// @dev votingNumber => price => totalVotes
-    mapping(uint256 => mapping(uint256 => uint256)) private _pendingPriceVotes;
-
     /// @notice Array of all suggested prices for each voting round
     /// @dev votingNumber => array of suggested prices
     mapping(uint256 => uint256[]) private _suggestedPrices;
+
+    mapping(uint256 => mapping(uint256 => address[])) private _votedAddresses;
+
+    struct VotingResult {
+        uint256 claimedWinningPrice;
+        address proposer;
+        uint256 proposedAt;
+        bool finalized;
+    }
+
+    mapping(uint256 => VotingResult) private _votingResults; // votingNumber -> result
+
+    uint256 public constant CHALLENGE_PERIOD = 2 hours;
 
     /**
      * @notice Creates a new voting-enabled exchange
@@ -58,18 +62,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 price_,
         uint8 feeBasisPoints
     ) ERC20Exchange(erc20, price_, feeBasisPoints) {}
-
-    /**
-     * @notice Restricts function access to accounts that haven't voted in current round
-     * @dev Prevents buying, selling, or transferring when user is participating in active voting
-     */
-    modifier onlyNotVoted() {
-        require(
-            !_isBalanceLocked[_votingNumber][msg.sender],
-            "The account has voted, cannot buy, sell or transfer"
-        );
-        _;
-    }
 
     /**
      * @notice Ensures a voting round is currently active
@@ -89,7 +81,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @dev Overrides parent function to add voting participation check
      * @return success True if purchase was successful
      */
-    function buy() external payable override onlyNotVoted returns (bool) {
+    function buy() external payable override returns (bool) {
         return _buy(msg.value);
     }
 
@@ -99,7 +91,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @param value Amount of tokens to sell
      * @return success True if sale was successful
      */
-    function sell(uint256 value) external override onlyNotVoted returns (bool) {
+    function sell(uint256 value) external override returns (bool) {
         return _sell(value);
     }
 
@@ -110,10 +102,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @param value Amount of tokens to transfer
      * @return success True if transfer was successful
      */
-    function transfer(
-        address to,
-        uint256 value
-    ) external onlyNotVoted returns (bool) {
+    function transfer(address to, uint256 value) external returns (bool) {
         return _TOKEN.transfer(to, value);
     }
 
@@ -126,98 +115,105 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
 
         _votingStartedTimeStamp = block.timestamp;
-        unchecked {
-            _votingNumber++;
-        }
+        _votingNumber++;
 
         emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
     }
 
     /// @inheritdoc IVotable
-    function vote(uint256 price) external override onlyNotVoted votingActive {
+    function vote(uint256 price) external override votingActive {
         uint256 requiredSupply = (_TOKEN.totalSupply() * VOTE_THRESHOLD_BPS) /
             BPS_DENOMINATOR;
         uint256 weight = _TOKEN.balanceOf(msg.sender);
-
         require(weight >= requiredSupply, "The account cannot vote");
-        require(
-            _pendingPriceVotes[_votingNumber][price] > 0,
-            "Price has not been suggested"
-        );
 
-        _isBalanceLocked[_votingNumber][msg.sender] = true;
-        _pendingPriceVotes[_votingNumber][price] += weight;
+        _votedAddresses[_votingNumber][price].push(msg.sender);
 
         emit VoteCasted(msg.sender, _votingNumber, price, weight);
     }
 
-    /// @inheritdoc IVotable
-    function suggestNewPrice(
-        uint256 price
-    ) external override onlyNotVoted votingActive {
-        uint256 requiredSupply = (_TOKEN.totalSupply() *
-            PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
-        uint256 weight = _TOKEN.balanceOf(msg.sender);
-
-        require(weight >= requiredSupply, "The account cannot suggest price");
-        require(
-            _pendingPriceVotes[_votingNumber][price] == 0,
-            "Price has already been suggested"
-        );
-
-        _pendingPriceVotes[_votingNumber][price] += weight;
-        _suggestedPrices[_votingNumber].push(price);
-        _isBalanceLocked[_votingNumber][msg.sender] = true;
-
-        emit PriceSuggested(
-            msg.sender,
-            _votingNumber,
-            price,
-            _TOKEN.balanceOf(msg.sender)
-        );
-    }
-
-    /// @inheritdoc IVotable
-    function endVoting() external override {
+    function proposeResult(uint256 winningPrice) external {
         require(_votingStartedTimeStamp != 0, "No voting in progress");
         require(
             block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
             "Voting is still in progress"
         );
 
-        uint256 winningPrice = 0;
+        _votingResults[_votingNumber] = VotingResult({
+            claimedWinningPrice: winningPrice,
+            proposer: msg.sender,
+            proposedAt: block.timestamp,
+            finalized: false
+        });
+    }
+
+    function _computeVotesForPrice(
+        uint256 price
+    ) internal view returns (uint256 total) {
+        address[] memory voters = _votedAddresses[_votingNumber][price];
+
+        for (uint256 i = 0; i < voters.length; i++) {
+            address voter = voters[i];
+            total += _TOKEN.balanceOf(voter);
+        }
+
+        return total;
+    }
+
+    function challengeResult(uint256 claimedWinningPrice) external override {
+        VotingResult memory result = _votingResults[_votingNumber];
+
+        require(result.proposedAt != 0, "No result to challenge");
+        require(!result.finalized, "Result already finalized");
+        require(
+            block.timestamp < result.proposedAt + CHALLENGE_PERIOD,
+            "Challenge period ended"
+        );
+
+        uint256 correctWinningPrice = 0;
         uint256 highestVotes = 0;
 
         uint256[] storage prices = _suggestedPrices[_votingNumber];
+
         for (uint256 i = 0; i < prices.length; i++) {
             uint256 price = prices[i];
-            uint256 votes = _pendingPriceVotes[_votingNumber][price];
+            uint256 votes = _computeVotesForPrice(price);
+
             if (votes > highestVotes) {
                 highestVotes = votes;
-                winningPrice = price;
+                correctWinningPrice = price;
             }
         }
 
-        if (winningPrice > 0) {
-            _setPrice(winningPrice);
+        require(
+            correctWinningPrice == claimedWinningPrice,
+            "The claimed winner is wrong"
+        );
+        emit ResultChallenged(_votingNumber, correctWinningPrice, msg.sender);
+    }
+
+    function finalizeVoting() external override {
+        VotingResult memory result = _votingResults[_votingNumber];
+        require(result.proposedAt != 0, "No result proposed");
+        require(!result.finalized, "Already finalized");
+        require(
+            block.timestamp >= result.proposedAt + CHALLENGE_PERIOD,
+            "Challenge period not ended"
+        );
+
+        if (result.claimedWinningPrice > 0) {
+            _setPrice(result.claimedWinningPrice);
         }
 
-        _votingStartedTimeStamp = 0;
+        emit VotingFinalized(_votingNumber, result.claimedWinningPrice);
+        emit EndVoting(_votingNumber, result.claimedWinningPrice);
 
-        emit EndVoting(_votingNumber, winningPrice);
+        _votingStartedTimeStamp = 0;
     }
 
     /// @inheritdoc IVotable
     function votingNumber() external view override onlyOwner returns (uint256) {
         return _votingNumber;
-    }
-
-    /// @inheritdoc IVotable
-    function pendingPriceVotes(
-        uint256 votingNumber_,
-        uint256 price_
-    ) external view override onlyOwner returns (uint256) {
-        return _pendingPriceVotes[votingNumber_][price_];
     }
 
     /// @inheritdoc IVotable
