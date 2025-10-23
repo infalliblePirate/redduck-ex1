@@ -46,13 +46,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev votingNumber => address => hasVoted
     mapping(uint256 => mapping(address => bool)) private _hasVoted;
 
-    struct VotingResult {
-        uint256 claimedWinningPrice;
-        address proposer;
-        uint256 proposedAt;
-        bool finalized;
-    }
-
     /// @notice Voting results for each voting round
     /// @dev votingNumber => VotingResult
     mapping(uint256 => VotingResult) private _votingResults;
@@ -135,7 +128,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             _votingNumber++;
         }
 
-        emit StartVoting(msg.sender, _votingStartedTimeStamp);
+        emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
     }
 
     /// @inheritdoc IVotable
@@ -153,10 +146,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 "The account cannot suggest price"
             );
             _suggestedPrices[_votingNumber].push(price);
-            emit PriceSuggested(msg.sender, price, weight);
+            emit PriceSuggested(msg.sender, _votingNumber, price, weight);
         } else {
             require(weight >= requiredSupplyToVote, "The account cannot vote");
-            emit VoteCasted(msg.sender, price, weight);
+            emit VoteCasted(msg.sender, _votingNumber, price, weight);
         }
         _votedAddresses[_votingNumber][price].push(msg.sender);
     }
@@ -174,7 +167,12 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             proposedAt: block.timestamp,
             finalized: false
         });
-        emit ResultProposed(msg.sender, winningPrice, block.timestamp);
+        emit ResultProposed(
+            msg.sender,
+            _votingNumber,
+            winningPrice,
+            block.timestamp
+        );
     }
 
     function _computeVotesForPrice(
@@ -237,7 +235,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             _setPrice(result.claimedWinningPrice);
         }
 
-        emit VotingFinalized(result.claimedWinningPrice);
+        emit VotingFinalized(_votingNumber, result.claimedWinningPrice);
         emit EndVoting(_votingNumber, result.claimedWinningPrice);
         result.finalized = true;
 
@@ -262,47 +260,29 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /// @inheritdoc IVotable
-    function suggestedPrices()
-        external
-        view
-        override
-        returns (uint256[] memory)
-    {
-        return _suggestedPrices[_votingNumber];
-    }
-
-    /// @notice Get suggested prices for a specific voting round
-    /// @param votingNumber_ The voting round number
-    /// @return Array of suggested prices
-    function getSuggestedPrices(
+    function suggestedPrices(
         uint256 votingNumber_
-    ) external view returns (uint256[] memory) {
+    ) external view override returns (uint256[] memory) {
         return _suggestedPrices[votingNumber_];
-    }
-
-    function votedAddresses(
-        uint256 price
-    ) external view override returns (address[] memory) {
-        return _votedAddresses[_votingNumber][price];
     }
 
     /// @notice Get voted addresses for a specific price in a specific voting round
     /// @param votingNumber_ The voting round number
     /// @param price The price to query
     /// @return Array of addresses that voted for this price
-    function getVotedAddresses(
+    function votedAddresses(
         uint256 votingNumber_,
         uint256 price
-    ) external view returns (address[] memory) {
+    ) external view override returns (address[] memory) {
         return _votedAddresses[votingNumber_][price];
     }
 
     /// @notice Get voting result for a specific voting round
     /// @param votingNumber_ The voting round number
     /// @return The voting result struct
-    function getVotingResult(
+    function votingResult(
         uint256 votingNumber_
-    ) external view returns (VotingResult memory) {
+    ) external view override returns (VotingResult memory) {
         return _votingResults[votingNumber_];
     }
 }

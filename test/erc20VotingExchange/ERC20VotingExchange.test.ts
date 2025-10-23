@@ -96,12 +96,13 @@ describe('ERC20VotingExchange test', () => {
     suggestedPrices: bigint[],
     token: ERC20,
     votingExchange: ERC20VotingExchange,
+    votingNumber: number,
   ): Promise<bigint> => {
     let highestVotes = 0n;
     let winningPrice = 0n;
 
     for (const price of suggestedPrices) {
-      const voters = await votingExchange.votedAddresses(price);
+      const voters = await votingExchange.votedAddresses(votingNumber, price);
       let totalVotes = 0n;
 
       for (const voter of voters) {
@@ -236,9 +237,9 @@ describe('ERC20VotingExchange test', () => {
 
       await expect(votingExchange.connect(user).vote(newSuggestedPrice))
         .to.emit(votingExchange, 'PriceSuggested')
-        .withArgs(user, newSuggestedPrice, userBalance);
+        .withArgs(user, 1, newSuggestedPrice, userBalance);
       expect(
-        (await votingExchange.suggestedPrices()).includes(newSuggestedPrice),
+        (await votingExchange.suggestedPrices(1)).includes(newSuggestedPrice),
       ).to.eq(true);
     });
 
@@ -310,7 +311,7 @@ describe('ERC20VotingExchange test', () => {
 
       await expect(votingExchange.connect(user).vote(newSuggestedPrice))
         .to.emit(votingExchange, 'VoteCasted')
-        .withArgs(user, newSuggestedPrice, userBalance);
+        .withArgs(user, 1, newSuggestedPrice, userBalance);
     });
 
     it('should allow multiple users to vote for same price', async () => {
@@ -326,12 +327,12 @@ describe('ERC20VotingExchange test', () => {
         votingExchange.connect(user).vote(newSuggestedPrice),
       ).to.emit(votingExchange, 'VoteCasted');
       expect(
-        (await votingExchange.votedAddresses(newSuggestedPrice)).includes(
+        (await votingExchange.votedAddresses(1, newSuggestedPrice)).includes(
           await deployer.getAddress(),
         ),
       ).to.eq(true);
       expect(
-        (await votingExchange.votedAddresses(newSuggestedPrice)).includes(
+        (await votingExchange.votedAddresses(1, newSuggestedPrice)).includes(
           await user.getAddress(),
         ),
       ).to.eq(true);
@@ -386,9 +387,10 @@ describe('ERC20VotingExchange test', () => {
       await time.increase(TIME_TO_VOTE);
 
       const winner = await calculateWinningPrice(
-        await votingExchange.suggestedPrices(),
+        await votingExchange.suggestedPrices(1),
         token,
         votingExchange,
+        1,
       );
 
       const tx = await votingExchange.connect(user).proposeResult(winner);
@@ -399,9 +401,10 @@ describe('ERC20VotingExchange test', () => {
       const log = receipt.logs.find((log) => log.topics[0] === eventTopic);
       const parsed = votingExchange.interface.parseLog(log!);
 
-      const [proposer, winningPrice, proposedAt] = parsed!.args;
+      const [proposer, votingNumber, winningPrice, proposedAt] = parsed!.args;
 
       expect(proposer).to.eq(user);
+      expect(votingNumber).to.eq(1);
       expect(winningPrice).to.eq(newSuggestedPrice);
       expect(proposedAt).to.be.closeTo(await time.latest(), 1);
     });
@@ -491,9 +494,10 @@ describe('ERC20VotingExchange test', () => {
       await votingExchange.proposeResult(price1);
 
       const winner = await calculateWinningPrice(
-        await votingExchange.suggestedPrices(),
+        await votingExchange.suggestedPrices(1),
         token,
         votingExchange,
+        1,
       );
 
       await expect(votingExchange.connect(user).challengeResult(price1))

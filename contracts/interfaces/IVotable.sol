@@ -17,6 +17,7 @@ interface IVotable {
      */
     event PriceSuggested(
         address indexed suggester,
+        uint256 votingNumber,
         uint256 price,
         uint256 weight
     );
@@ -27,24 +28,41 @@ interface IVotable {
      * @param price Price being voted for
      * @param weight Voting weight of the voter (their token balance)
      */
-    event VoteCasted(address indexed voter, uint256 price, uint256 weight);
+    event VoteCasted(
+        address indexed voter,
+        uint256 votingNumber,
+        uint256 price,
+        uint256 weight
+    );
 
     /**
      * @notice Emitted when a new voting round starts
      * @param caller Address that initiated the voting round
      * @param timestamp Block timestamp when voting started
      */
-    event StartVoting(address indexed caller, uint256 timestamp);
+    event StartVoting(
+        address indexed caller,
+        uint256 votingNumber,
+        uint256 timestamp
+    );
 
     event ResultProposed(
         address indexed proposer,
+        uint256 votingNumber,
         uint256 winningPrice,
         uint256 proposedAt
     );
 
     event ResultChallenged(uint256, address);
 
-    event VotingFinalized(uint256);
+    event VotingFinalized(uint256, uint256);
+
+    struct VotingResult {
+        uint256 claimedWinningPrice;
+        address proposer;
+        uint256 proposedAt;
+        bool finalized;
+    }
 
     /**
      * @notice Emitted when a voting round ends
@@ -76,14 +94,21 @@ interface IVotable {
     function votingStartedTimeStamp() external view returns (uint256);
 
     function votedAddresses(
+        uint256 votingNumber_,
         uint256 price
     ) external view returns (address[] memory);
+
+    function votingResult(
+        uint256 votingNumber_
+    ) external view returns (VotingResult memory);
 
     /**
      * @notice Get all suggested prices for a specific voting round
      * @return prices Array of all suggested prices in that round
      */
-    function suggestedPrices() external view returns (uint256[] memory);
+    function suggestedPrices(
+        uint256 votingNumber
+    ) external view returns (uint256[] memory);
 
     function challengeResult(uint256 claimedWinningPrice) external;
 
