@@ -176,8 +176,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     function challengeResult(uint256 claimedWinningPrice) external override {
         VotingResult memory result = _votingResult;
 
-        require(result.proposedAt != 0, "No result to challenge");
         require(!result.finalized, "Result already finalized");
+        require(result.proposedAt != 0, "No result to challenge");
+
         require(
             block.timestamp < result.proposedAt + CHALLENGE_PERIOD,
             "Challenge period ended"
@@ -202,11 +203,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             correctWinningPrice == claimedWinningPrice,
             "The claimed winner is wrong"
         );
-        emit ResultChallenged(0, correctWinningPrice, msg.sender);
+        emit ResultChallenged(correctWinningPrice, msg.sender);
     }
 
     function finalizeVoting() external override {
-        VotingResult memory result = _votingResult;
+        VotingResult storage result = _votingResult;
         require(result.proposedAt != 0, "No result proposed");
         require(!result.finalized, "Already finalized");
         require(
@@ -218,8 +219,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             _setPrice(result.claimedWinningPrice);
         }
 
-        emit VotingFinalized(0, result.claimedWinningPrice);
+        emit VotingFinalized(result.claimedWinningPrice);
         emit EndVoting(0, result.claimedWinningPrice);
+        result.finalized = true;
 
         _votingStartedTimeStamp = 0;
     }

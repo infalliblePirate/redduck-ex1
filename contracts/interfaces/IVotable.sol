@@ -42,9 +42,9 @@ interface IVotable {
         uint256 proposedAt
     );
 
-    event ResultChallenged(uint256, uint256, address);
+    event ResultChallenged(uint256, address);
 
-    event VotingFinalized(uint256, uint256);
+    event VotingFinalized(uint256);
 
     /**
      * @notice Emitted when a voting round ends
