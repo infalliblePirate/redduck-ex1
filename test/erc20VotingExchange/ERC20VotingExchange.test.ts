@@ -358,7 +358,7 @@ describe('ERC20VotingExchange test', () => {
     });
   });
 
-  describe('Propose Result', () => {
+  describe('Propose result', () => {
     it('should revert if no voting in progress', async () => {
       const { votingExchange, deployer } = await setup();
 
@@ -410,7 +410,7 @@ describe('ERC20VotingExchange test', () => {
     });
   });
 
-  describe('Challenge Result', () => {
+  describe('Challenge result', () => {
     it('should revert if no result to challenge', async () => {
       const { votingExchange, user } = await setup();
 
@@ -503,6 +503,71 @@ describe('ERC20VotingExchange test', () => {
       await expect(votingExchange.connect(user).challengeResult(price1))
         .to.emit(votingExchange, 'ResultChallenged')
         .withArgs(winner, user);
+    });
+  });
+
+  describe('Full voting round flow', () => {
+    it('should handle two complete voting rounds', async () => {
+      const { deployer, user, token, votingExchange } = await setup();
+
+      const ethToBuy = ethToSuggest * 2n;
+      await buyTokens(votingExchange, deployer, ethToBuy);
+      await buyTokens(votingExchange, user, ethToBuy);
+
+      const initialPrice = await votingExchange.price();
+
+      // round 1
+      await votingExchange.startVoting();
+
+      const price1 = hre.ethers.parseEther('0.000002');
+      const price2 = hre.ethers.parseEther('0.000003');
+
+      await votingExchange.connect(deployer).vote(price1);
+      await votingExchange.connect(user).vote(price2);
+
+      await time.increase(TIME_TO_VOTE);
+
+      const winner1 = await calculateWinningPrice(
+        await votingExchange.suggestedPrices(1),
+        token,
+        votingExchange,
+        1,
+      );
+
+      await votingExchange.connect(user).proposeResult(winner1);
+      await votingExchange.connect(deployer).challengeResult(winner1);
+      await time.increase(CHALLENGE_PERIOD);
+      await votingExchange.finalizeVoting();
+
+      const priceAfterRound1 = await votingExchange.price();
+      expect(priceAfterRound1).to.equal(winner1);
+      expect(priceAfterRound1).to.not.equal(initialPrice);
+
+      // round 2
+      await votingExchange.startVoting();
+
+      const price3 = hre.ethers.parseEther('0.000004');
+      const price4 = hre.ethers.parseEther('0.000005');
+
+      await votingExchange.connect(deployer).vote(price3);
+      await votingExchange.connect(user).vote(price4);
+
+      await time.increase(TIME_TO_VOTE);
+
+      const winner2 = await calculateWinningPrice(
+        await votingExchange.suggestedPrices(2),
+        token,
+        votingExchange,
+        2,
+      );
+
+      await votingExchange.connect(user).proposeResult(winner2);
+      await time.increase(CHALLENGE_PERIOD);
+      await votingExchange.finalizeVoting();
+
+      const priceAfterRound2 = await votingExchange.price();
+      expect(priceAfterRound2).to.equal(winner2);
+      expect(priceAfterRound2).to.not.equal(priceAfterRound1);
     });
   });
 });
