@@ -73,8 +73,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     modifier notVoted() {
-        require(_hasVoted[msg.sender] == false, "User has aleady voted");
+        require(_hasVoted[msg.sender] == false, "User already voted");
         _;
+        _hasVoted[msg.sender] = true;
     }
 
     /**
@@ -134,12 +135,12 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 weight >= requiredSupplyToSuggest,
                 "The account cannot suggest price"
             );
+            _suggestedPrices.push(price);
             emit PriceSuggested(msg.sender, price, weight);
         } else {
             require(weight >= requiredSupplyToVote, "The account cannot vote");
             emit VoteCasted(msg.sender, price, weight);
         }
-        _hasVoted[msg.sender] = true;
         _votedAddresses[price].push(msg.sender);
     }
 
@@ -234,7 +235,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /// @inheritdoc IVotable
-    function getSuggestedPrices()
+    function suggestedPrices()
         external
         view
         override

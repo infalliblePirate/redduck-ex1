@@ -14,9 +14,9 @@ import {
 describe('ERC20VotingExchange test', () => {
   const TIME_TO_VOTE = 5n * 60n;
   // const CHALLENGE_PERIOD = 2n * 60n * 60n;
-  // const PRICE_SUGGESTION_THRESHOLD_BPS = 10n;
+  const PRICE_SUGGESTION_THRESHOLD_BPS = 10n;
   // const VOTE_THRESHOLD_BPS = 5n;
-  // const BPS_DENOMINATOR = 10000n;
+  const BPS_DENOMINATOR = 10000n;
 
   const FEE_DENOMINATOR: bigint = 10_000n;
 
@@ -30,17 +30,17 @@ describe('ERC20VotingExchange test', () => {
   const expectedFeeBP = 10n;
 
   const tradeEthAmount = hre.ethers.parseEther('0.000001');
-  // const newSuggestedPrice = hre.ethers.parseEther('0.000002');
+  const newSuggestedPrice = hre.ethers.parseEther('0.000002');
   // const tokensToVote = (expectedSupply * VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
-  // const tokensToSuggest =
-  //   (expectedSupply * PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
+  const tokensToSuggest =
+    (expectedSupply * PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
-  // const bufferMultiplier = 101n;
-  // const bufferDenominator = 100n;
+  const bufferMultiplier = 101n;
+  const bufferDenominator = 100n;
 
-  // const ethToSuggest =
-  //   (tokensToSuggest * expectedPrice * bufferMultiplier) /
-  //   (10n ** decimals * bufferDenominator);
+  const ethToSuggest =
+    (tokensToSuggest * expectedPrice * bufferMultiplier) /
+    (10n ** decimals * bufferDenominator);
   // const ethToVote =
   //   (tokensToVote * expectedPrice * bufferMultiplier) /
   //   (10n ** decimals * bufferDenominator);
@@ -179,6 +179,72 @@ describe('ERC20VotingExchange test', () => {
       await time.increase(TIME_TO_VOTE);
 
       await expect(votingExchange.startVoting()).to.not.be.reverted;
+    });
+  });
+
+  describe('Suggest price', () => {
+    it('should revert if user does not have enough balance', async () => {
+      const { votingExchange, user } = await setup();
+
+      await votingExchange.startVoting();
+      await expect(
+        votingExchange.connect(user).vote(newSuggestedPrice),
+      ).to.be.revertedWith('The account cannot suggest price');
+    });
+
+    it('should revert if voting not started', async () => {
+      const { votingExchange, user } = await setup();
+      await expect(
+        votingExchange.connect(user).vote(newSuggestedPrice),
+      ).to.be.revertedWith('No active voting');
+    });
+
+    it('should allow suggesting a price and emit PriceSuggested', async () => {
+      const { votingExchange, user, token } = await setup();
+
+      await buyTokens(votingExchange, user, ethToSuggest);
+      const userBalance = await token.balanceOf(user);
+
+      await votingExchange.startVoting();
+
+      await expect(votingExchange.connect(user).vote(newSuggestedPrice))
+        .to.emit(votingExchange, 'PriceSuggested')
+        .withArgs(user, newSuggestedPrice, userBalance);
+      expect(
+        (await votingExchange.suggestedPrices()).includes(newSuggestedPrice),
+      ).to.eq(true);
+    });
+
+    it('should revert after voting time has passed', async () => {
+      const { votingExchange, user } = await setup();
+
+      await buyTokens(votingExchange, user, ethToSuggest);
+      await votingExchange.startVoting();
+
+      await time.increase(TIME_TO_VOTE);
+
+      await expect(
+        votingExchange.connect(user).vote(newSuggestedPrice),
+      ).to.be.revertedWith('No active voting');
+    });
+
+    it('should not allow same user to suggest multiple prices', async () => {
+      const { votingExchange, deployer } = await setup();
+
+      await buyTokens(votingExchange, deployer, ethToSuggest);
+      await votingExchange.startVoting();
+
+      const price1 = hre.ethers.parseEther('0.000002');
+      const price2 = hre.ethers.parseEther('0.000003');
+
+      await expect(votingExchange.connect(deployer).vote(price1)).to.emit(
+        votingExchange,
+        'PriceSuggested',
+      );
+
+      await expect(
+        votingExchange.connect(deployer).vote(price2),
+      ).to.be.revertedWith('User already voted');
     });
   });
 });

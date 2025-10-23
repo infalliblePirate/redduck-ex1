@@ -27,27 +27,20 @@ interface IVotable {
      * @param price Price being voted for
      * @param weight Voting weight of the voter (their token balance)
      */
-    event VoteCasted(
-        address indexed voter,
-        uint256 price,
-        uint256 weight
-    );
+    event VoteCasted(address indexed voter, uint256 price, uint256 weight);
 
     /**
      * @notice Emitted when a new voting round starts
      * @param caller Address that initiated the voting round
      * @param timestamp Block timestamp when voting started
      */
-    event StartVoting(
-        address indexed caller,
-        uint256 timestamp
-    );
+    event StartVoting(address indexed caller, uint256 timestamp);
 
     /**
      * @notice Emitted when a voting round ends
      * @param price Winning price (0 if no votes were cast)
      */
-    event EndVoting(uint256 indexed , uint256 price);
+    event EndVoting(uint256 indexed, uint256 price);
 
     event ResultChallenged(uint256, uint256, address);
     event VotingFinalized(uint256, uint256);
@@ -79,7 +72,7 @@ interface IVotable {
      * @notice Get all suggested prices for a specific voting round
      * @return prices Array of all suggested prices in that round
      */
-    function getSuggestedPrices() external view returns (uint256[] memory);
+    function suggestedPrices() external view returns (uint256[] calldata);
 
     function challengeResult(uint256 claimedWinningPrice) external;
 
