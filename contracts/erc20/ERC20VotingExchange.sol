@@ -157,6 +157,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             proposedAt: block.timestamp,
             finalized: false
         });
+        emit ResultProposed(msg.sender, winningPrice, block.timestamp);
     }
 
     function _computeVotesForPrice(

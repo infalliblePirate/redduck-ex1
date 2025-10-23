@@ -329,4 +329,50 @@ describe('ERC20VotingExchange test', () => {
       ).to.be.revertedWith('User already voted');
     });
   });
+
+  describe('Propose Result', () => {
+    it('should revert if no voting in progress', async () => {
+      const { votingExchange, deployer } = await setup();
+
+      await expect(
+        votingExchange.connect(deployer).proposeResult(newSuggestedPrice),
+      ).to.be.revertedWith('No voting in progress');
+    });
+
+    it('should revert if voting is still in progress', async () => {
+      const { votingExchange, deployer } = await setup();
+
+      await votingExchange.startVoting();
+
+      await expect(
+        votingExchange.connect(deployer).proposeResult(newSuggestedPrice),
+      ).to.be.revertedWith('Voting is still in progress');
+    });
+
+    it('should allow proposing result after voting time passed', async () => {
+      const { votingExchange, deployer, user } = await setup();
+
+      await buyTokens(votingExchange, deployer, ethToSuggest);
+      await votingExchange.startVoting();
+      await votingExchange.connect(deployer).vote(newSuggestedPrice);
+
+      await time.increase(TIME_TO_VOTE);
+
+      const tx = await votingExchange
+        .connect(user)
+        .proposeResult(newSuggestedPrice);
+      const receipt = (await tx.wait())!;
+
+      const eventTopic =
+        votingExchange.interface.getEvent('ResultProposed').topicHash;
+      const log = receipt.logs.find((log) => log.topics[0] === eventTopic);
+      const parsed = votingExchange.interface.parseLog(log!);
+
+      const [proposer, winningPrice, proposedAt] = parsed!.args;
+
+      expect(proposer).to.eq(user);
+      expect(winningPrice).to.eq(newSuggestedPrice);
+      expect(proposedAt).to.be.closeTo(await time.latest(), 1);
+    });
+  });
 });

@@ -36,14 +36,21 @@ interface IVotable {
      */
     event StartVoting(address indexed caller, uint256 timestamp);
 
+    event ResultProposed(
+        address indexed proposer,
+        uint256 winningPrice,
+        uint256 proposedAt
+    );
+
+    event ResultChallenged(uint256, uint256, address);
+
+    event VotingFinalized(uint256, uint256);
+
     /**
      * @notice Emitted when a voting round ends
      * @param price Winning price (0 if no votes were cast)
      */
     event EndVoting(uint256 indexed, uint256 price);
-
-    event ResultChallenged(uint256, uint256, address);
-    event VotingFinalized(uint256, uint256);
 
     /**
      * @notice Start a new voting round
@@ -71,6 +78,7 @@ interface IVotable {
     function votedAddresses(
         uint256 price
     ) external view returns (address[] memory);
+
     /**
      * @notice Get all suggested prices for a specific voting round
      * @return prices Array of all suggested prices in that round
