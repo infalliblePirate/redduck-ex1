@@ -68,11 +68,14 @@ interface IVotable {
      */
     function votingStartedTimeStamp() external view returns (uint256);
 
+    function votedAddresses(
+        uint256 price
+    ) external view returns (address[] memory);
     /**
      * @notice Get all suggested prices for a specific voting round
      * @return prices Array of all suggested prices in that round
      */
-    function suggestedPrices() external view returns (uint256[] calldata);
+    function suggestedPrices() external view returns (uint256[] memory);
 
     function challengeResult(uint256 claimedWinningPrice) external;
 

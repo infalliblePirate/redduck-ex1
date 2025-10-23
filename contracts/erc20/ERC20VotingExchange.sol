@@ -243,4 +243,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     {
         return _suggestedPrices;
     }
+
+    function votedAddresses(
+        uint256 price
+    ) external view override returns (address[] memory) {
+        return _votedAddresses[price];
+    }
 }
