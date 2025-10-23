@@ -1,4 +1,4 @@
-// import { time } from '@nomicfoundation/hardhat-network-helpers';
+import { time } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
 import { Signer } from 'ethers';
 import hre from 'hardhat';
@@ -12,7 +12,7 @@ import {
 } from '../../typechain-types';
 
 describe('ERC20VotingExchange test', () => {
-  // const TIME_TO_VOTE = 5n * 60n;
+  const TIME_TO_VOTE = 5n * 60n;
   // const CHALLENGE_PERIOD = 2n * 60n * 60n;
   // const PRICE_SUGGESTION_THRESHOLD_BPS = 10n;
   // const VOTE_THRESHOLD_BPS = 5n;
@@ -140,6 +140,45 @@ describe('ERC20VotingExchange test', () => {
       await expect(
         votingExchange.connect(user).transfer(deployer, boughtTokens),
       ).to.not.be.reverted;
+    });
+  });
+
+  describe('Start voting', () => {
+    it('should start a new voting round and emit StartVoting event', async () => {
+      const { votingExchange, deployer } = await setup();
+
+      await expect(votingExchange.connect(deployer).startVoting()).to.emit(
+        votingExchange,
+        'StartVoting',
+      );
+
+      expect(await votingExchange.votingStartedTimeStamp()).to.be.closeTo(
+        await time.latest(),
+        1,
+      );
+    });
+
+    it('should revert if non-owner starts voting', async () => {
+      const { votingExchange, user } = await setup();
+      await expect(votingExchange.connect(user).startVoting()).to.be.reverted;
+    });
+
+    it('should revert if voting is already active', async () => {
+      const { votingExchange } = await setup();
+
+      await votingExchange.startVoting();
+      await expect(votingExchange.startVoting()).to.be.revertedWith(
+        'Voting already active',
+      );
+    });
+
+    it('should allow starting new voting after previous round ended', async () => {
+      const { votingExchange } = await setup();
+
+      await votingExchange.startVoting();
+      await time.increase(TIME_TO_VOTE);
+
+      await expect(votingExchange.startVoting()).to.not.be.reverted;
     });
   });
 });
