@@ -30,11 +30,21 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev Set to 0 when no voting is active
     uint256 private _votingStartedTimeStamp;
 
-    /// @notice Array of all suggested prices for each voting round
-    uint256[] private _suggestedPrices;
+    /// @notice Counter for voting rounds
+    /// @dev Increments with each new voting session
+    uint256 private _votingNumber;
 
-    mapping(uint256 => address[]) private _votedAddresses;
-    mapping(address => bool) private _hasVoted;
+    /// @notice Array of all suggested prices for each voting round
+    /// @dev votingNumber => array of suggested prices
+    mapping(uint256 => uint256[]) private _suggestedPrices;
+
+    /// @notice Mapping of voted addresses for each price in each voting round
+    /// @dev votingNumber => price => array of voter addresses
+    mapping(uint256 => mapping(uint256 => address[])) private _votedAddresses;
+
+    /// @notice Tracks whether an address has voted in a specific voting round
+    /// @dev votingNumber => address => hasVoted
+    mapping(uint256 => mapping(address => bool)) private _hasVoted;
 
     struct VotingResult {
         uint256 claimedWinningPrice;
@@ -43,7 +53,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         bool finalized;
     }
 
-    VotingResult private _votingResult; // votingNumber -> result
+    /// @notice Voting results for each voting round
+    /// @dev votingNumber => VotingResult
+    mapping(uint256 => VotingResult) private _votingResults;
 
     uint256 public constant CHALLENGE_PERIOD = 2 hours;
 
@@ -73,14 +85,17 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     modifier notVoted() {
-        require(_hasVoted[msg.sender] == false, "User already voted");
+        require(
+            _hasVoted[_votingNumber][msg.sender] == false,
+            "User already voted"
+        );
         _;
-        _hasVoted[msg.sender] = true;
+        _hasVoted[_votingNumber][msg.sender] = true;
     }
 
     /**
-     * @notice Buy tokens with ETH (restricted during voting participation)
-     * @dev Overrides parent function to add voting participation check
+     * @notice Buy tokens with ETH
+     * @dev Overrides parent function
      * @return success True if purchase was successful
      */
     function buy() external payable override returns (bool) {
@@ -88,8 +103,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /**
-     * @notice Sell tokens for ETH (restricted during voting participation)
-     * @dev Overrides parent function to add voting participation check
+     * @notice Sell tokens for ETH
+     * @dev Overrides parent function
      * @param value Amount of tokens to sell
      * @return success True if sale was successful
      */
@@ -98,8 +113,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /**
-     * @notice Transfer tokens to another address (restricted during voting participation)
-     * @dev Prevents token transfers while user has active vote/suggestion
+     * @notice Transfer tokens to another address
      * @param to Recipient address
      * @param value Amount of tokens to transfer
      * @return success True if transfer was successful
@@ -117,6 +131,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
 
         _votingStartedTimeStamp = block.timestamp;
+        unchecked {
+            _votingNumber++;
+        }
 
         emit StartVoting(msg.sender, _votingStartedTimeStamp);
     }
@@ -130,18 +147,18 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
         uint256 weight = _TOKEN.balanceOf(msg.sender);
-        if (_votedAddresses[price].length == 0) {
+        if (_votedAddresses[_votingNumber][price].length == 0) {
             require(
                 weight >= requiredSupplyToSuggest,
                 "The account cannot suggest price"
             );
-            _suggestedPrices.push(price);
+            _suggestedPrices[_votingNumber].push(price);
             emit PriceSuggested(msg.sender, price, weight);
         } else {
             require(weight >= requiredSupplyToVote, "The account cannot vote");
             emit VoteCasted(msg.sender, price, weight);
         }
-        _votedAddresses[price].push(msg.sender);
+        _votedAddresses[_votingNumber][price].push(msg.sender);
     }
 
     function proposeResult(uint256 winningPrice) external {
@@ -151,7 +168,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "Voting is still in progress"
         );
 
-        _votingResult = VotingResult({
+        _votingResults[_votingNumber] = VotingResult({
             claimedWinningPrice: winningPrice,
             proposer: msg.sender,
             proposedAt: block.timestamp,
@@ -161,9 +178,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function _computeVotesForPrice(
+        uint256 votingNumber_,
         uint256 price
     ) internal view returns (uint256 total) {
-        address[] memory voters = _votedAddresses[price];
+        address[] memory voters = _votedAddresses[votingNumber_][price];
 
         for (uint256 i = 0; i < voters.length; i++) {
             address voter = voters[i];
@@ -174,7 +192,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function challengeResult(uint256 claimedWinningPrice) external override {
-        VotingResult memory result = _votingResult;
+        VotingResult memory result = _votingResults[_votingNumber];
 
         require(!result.finalized, "Result already finalized");
         require(result.proposedAt != 0, "No result to challenge");
@@ -187,11 +205,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 correctWinningPrice = 0;
         uint256 highestVotes = 0;
 
-        uint256[] storage prices = _suggestedPrices;
+        uint256[] storage prices = _suggestedPrices[_votingNumber];
 
         for (uint256 i = 0; i < prices.length; i++) {
             uint256 price = prices[i];
-            uint256 votes = _computeVotesForPrice(price);
+            uint256 votes = _computeVotesForPrice(_votingNumber, price);
 
             if (votes > highestVotes) {
                 highestVotes = votes;
@@ -207,7 +225,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function finalizeVoting() external override {
-        VotingResult storage result = _votingResult;
+        VotingResult storage result = _votingResults[_votingNumber];
         require(result.proposedAt != 0, "No result proposed");
         require(!result.finalized, "Already finalized");
         require(
@@ -220,10 +238,16 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         }
 
         emit VotingFinalized(result.claimedWinningPrice);
-        emit EndVoting(0, result.claimedWinningPrice);
+        emit EndVoting(_votingNumber, result.claimedWinningPrice);
         result.finalized = true;
 
         _votingStartedTimeStamp = 0;
+    }
+
+    /// @notice Get the current voting number
+    /// @return Current voting round number
+    function votingNumber() external view returns (uint256) {
+        return _votingNumber;
     }
 
     /// @inheritdoc IVotable
@@ -244,12 +268,41 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         override
         returns (uint256[] memory)
     {
-        return _suggestedPrices;
+        return _suggestedPrices[_votingNumber];
+    }
+
+    /// @notice Get suggested prices for a specific voting round
+    /// @param votingNumber_ The voting round number
+    /// @return Array of suggested prices
+    function getSuggestedPrices(
+        uint256 votingNumber_
+    ) external view returns (uint256[] memory) {
+        return _suggestedPrices[votingNumber_];
     }
 
     function votedAddresses(
         uint256 price
     ) external view override returns (address[] memory) {
-        return _votedAddresses[price];
+        return _votedAddresses[_votingNumber][price];
+    }
+
+    /// @notice Get voted addresses for a specific price in a specific voting round
+    /// @param votingNumber_ The voting round number
+    /// @param price The price to query
+    /// @return Array of addresses that voted for this price
+    function getVotedAddresses(
+        uint256 votingNumber_,
+        uint256 price
+    ) external view returns (address[] memory) {
+        return _votedAddresses[votingNumber_][price];
+    }
+
+    /// @notice Get voting result for a specific voting round
+    /// @param votingNumber_ The voting round number
+    /// @return The voting result struct
+    function getVotingResult(
+        uint256 votingNumber_
+    ) external view returns (VotingResult memory) {
+        return _votingResults[votingNumber_];
     }
 }
