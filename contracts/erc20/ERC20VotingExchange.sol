@@ -52,6 +52,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     uint256 public constant CHALLENGE_PERIOD = 2 hours;
 
+    mapping(uint256 => uint256) _votingEndBlocks; // todo: maybe delete?? huh
+    mapping(uint256 => mapping(address => uint256)) _snapshotBalances; // nVotingNumber => address = token.balance
+
     /**
      * @notice Creates a new voting-enabled exchange
      * @param erc20 Address of the ERC20 token contract
@@ -179,11 +182,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 votingNumber_,
         uint256 price
     ) internal view returns (uint256 total) {
-        address[] memory voters = _votedAddresses[votingNumber_][price];
+        address[] storage voters = _votedAddresses[votingNumber_][price];
 
         for (uint256 i = 0; i < voters.length; i++) {
             address voter = voters[i];
-            total += _TOKEN.balanceOf(voter);
+            total += _snapshotBalances[_votingNumber][voter];
         }
 
         return total;
@@ -222,6 +225,29 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit ResultChallenged(correctWinningPrice, msg.sender);
     }
 
+    function endVoting() external {
+        require(
+            block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
+            "Voting not ended"
+        );
+        require(_votingEndBlocks[_votingNumber] == 0, "Already ended");
+
+        _votingEndBlocks[_votingNumber] = block.number;
+
+        for (uint i = 0; i < _suggestedPrices[_votingNumber].length; ++i) {
+            address[] storage voters = _votedAddresses[_votingNumber][
+                _suggestedPrices[_votingNumber][i]
+            ];
+            for (uint j = 0; j < voters.length; ++j) {
+                _snapshotBalances[_votingNumber][voters[j]] = _TOKEN.balanceOf(
+                    voters[j]
+                );
+            }
+        }
+
+        emit EndVoting(_votingNumber, _votingEndBlocks[_votingNumber]);
+    }
+
     function finalizeVoting() external override {
         VotingResult storage result = _votingResults[_votingNumber];
         require(result.proposedAt != 0, "No result proposed");
@@ -236,7 +262,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         }
 
         emit VotingFinalized(_votingNumber, result.claimedWinningPrice);
-        emit EndVoting(_votingNumber, result.claimedWinningPrice);
         result.finalized = true;
 
         _votingStartedTimeStamp = 0;

@@ -66,9 +66,8 @@ interface IVotable {
 
     /**
      * @notice Emitted when a voting round ends
-     * @param price Winning price (0 if no votes were cast)
      */
-    event EndVoting(uint256 indexed, uint256 price);
+    event EndVoting(uint256 indexed, uint256 timestamp);
 
     /**
      * @notice Start a new voting round
