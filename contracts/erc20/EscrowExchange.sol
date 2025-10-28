@@ -46,6 +46,9 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         _TOKEN = ERC20(erc20);
     }
 
+    /**
+     * @inheritdoc IEscrowable
+     */
     function deposit(uint256 amount) external override {
         require(amount > 0, "Zero amount");
         require(
@@ -54,17 +57,25 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         );
 
         _balances[msg.sender] += amount;
+        emit Deposited(msg.sender, amount);
     }
 
+    /**
+     * @inheritdoc IEscrowable
+     */
     function withdraw(uint256 amount) external override {
         require(amount > 0, "Zero amount");
         require(_balances[msg.sender] >= amount, "Insufficient balance");
 
         _balances[msg.sender] -= amount;
-
         require(_TOKEN.transfer(msg.sender, amount), "Transfer failed");
+
+        emit Withdrawn(msg.sender, amount);
     }
 
+    /**
+     * @inheritdoc IEscrowable
+     */
     function transferFrom(
         address from,
         address to,
@@ -76,6 +87,8 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
 
         _balances[from] -= amount;
         _balances[to] += amount;
+
+        emit EscrowTransfer(from, to, amount);
         return true;
     }
 
@@ -83,10 +96,12 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return _balances[user];
     }
 
+    /// @inheritdoc IEscrowable
     function token() external view override returns (ERC20) {
         return _TOKEN;
     }
 
+    /// @inheritdoc IExchangable
     function buy() external payable virtual override returns (bool) {
         return _buy(msg.value);
     }
@@ -115,10 +130,18 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return true;
     }
 
+    /// @inheritdoc IExchangable
     function sell(uint256 value) external virtual override returns (bool) {
         return _sell(value);
     }
 
+    /**
+     * @notice Internal function to process token sales
+     * @dev Calculates ETH to send, deducts fees, and transfers to seller
+     * @dev Requires prior token approval from seller
+     * @param value Amount of tokens to sell
+     * @return success True if sale was successful
+     */
     function _sell(uint256 value) internal returns (bool) {
         require(
             _balances[msg.sender] >= value,
@@ -141,6 +164,7 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return true;
     }
 
+    /// @inheritdoc IExchangable
     function addLiquidity(
         uint256 tokenSupply
     ) external payable override onlyOwner {
@@ -152,10 +176,12 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         _balances[address(this)] += tokenSupply;
     }
 
+    /// @inheritdoc IExchangable
     function liquidity() external view override returns (uint256, uint256) {
         return (_balances[address(this)], address(this).balance);
     }
 
+    /// @inheritdoc IExchangable
     function price() external view override returns (uint256) {
         return _price;
     }
@@ -181,10 +207,12 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return true;
     }
 
+    /// @inheritdoc IExchangable
     function feeBasisPoints() external view override returns (uint8) {
         return _feeBasisPoints;
     }
 
+    /// @inheritdoc IExchangable
     function setFeeBasisPoints(
         uint8 feeBps
     ) external override onlyOwner returns (bool) {
@@ -192,10 +220,12 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return true;
     }
 
+    /// @inheritdoc IExchangable
     function accumulatedFee() external view override returns (uint256) {
         return _accumulatedFee;
     }
 
+    /// @inheritdoc IExchangable
     function resetLiquidity(
         address to
     ) external override onlyOwner returns (bool) {
@@ -206,6 +236,7 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return true;
     }
 
+    /// @inheritdoc IExchangable
     function weeklyBurnFee() external override returns (bool) {
         require(
             block.timestamp >= lastBurnTimestamp + BURN_INTERVAL,
