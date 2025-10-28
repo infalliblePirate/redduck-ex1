@@ -2,15 +2,15 @@
 pragma solidity ^0.8.24;
 
 import "./ERC20Exchange.sol";
+import "./EscrowExchange.sol";
 import "../interfaces/IVotable.sol";
 
 /**
  * @title ERC20VotingExchange
- * @notice Extended ERC20Tradable contract with ability to vote for a price change
  * @author Kateryna Pavlenko
  */
 
-contract ERC20VotingExchange is IVotable, ERC20Exchange {
+contract ERC20VotingExchange is IVotable, EscrowExchange {
     /// @notice Duration of each voting round
     uint256 public constant TIME_TO_VOTE = 5 minutes;
 
@@ -44,11 +44,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     mapping(uint256 => mapping(address => uint256)) private _stackedTokens; // user -> balance
     mapping(uint256 => mapping(address => uint256)) private _votedForPrice; // user -> price
-    mapping(uint256 => mapping(uint256 => bool)) private _priceExists; // user -> price
+    mapping(uint256 => mapping(uint256 => bool)) private _priceExists;
 
     /**
      * @notice Creates a new voting-enabled exchange
-     * @param erc20 Address of the ERC20 token contract
+     * @param erc20 Address of the erc20 contract
      * @param price_ Initial price per token in wei
      * @param feeBasisPoints Trading fee in basis points
      */
@@ -56,7 +56,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         address erc20,
         uint256 price_,
         uint8 feeBasisPoints
-    ) ERC20Exchange(erc20, price_, feeBasisPoints) {}
+    ) EscrowExchange(erc20, price_, feeBasisPoints) {}
 
     /**
      * @notice Ensures a voting round is currently active
@@ -75,15 +75,18 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 votedPrice = _votedForPrice[_votingNumber][user];
         if (votedPrice == 0) return;
 
-        uint256 currentBalance = _TOKEN.balanceOf(user);
+        uint256 currentBalance = balanceOf(user);
         uint256 previousStacked = _stackedTokens[_votingNumber][user];
 
         if (currentBalance > previousStacked) {
             _pendingPriceVotes[_votingNumber][votedPrice] +=
                 currentBalance - previousStacked;
         } else if (currentBalance < previousStacked) {
-            _pendingPriceVotes[_votingNumber][votedPrice] -=
-                previousStacked - currentBalance;
+            uint256 dec = previousStacked - currentBalance;
+            uint256 total = _pendingPriceVotes[_votingNumber][votedPrice];
+            _pendingPriceVotes[_votingNumber][votedPrice] = dec >= total
+                ? 0
+                : total - dec;
         }
 
         _stackedTokens[_votingNumber][user] = currentBalance;
@@ -95,8 +98,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @return success True if purchase was successful
      */
     function buy() external payable override returns (bool) {
-        // require(mapping[msg.sender] >= msg.value); shot ne to
-        // _stackedTokens[_votingNumber][msg.sender] += // how do i obtain how many tokens I bought
         bool ok = _buy(msg.value);
         if (ok) {
             _updateVoteWeight(msg.sender);
@@ -126,7 +127,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @return success True if transfer was successful
      */
     function transfer(address to, uint256 value) external returns (bool) {
-        bool ok = _TOKEN.transferFrom(msg.sender, to, value);
+        bool ok = transferFrom(msg.sender, to, value);
         if (ok) {
             _updateVoteWeight(msg.sender);
             _updateVoteWeight(to);
@@ -158,10 +159,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 requiredSupplyToSuggest = (_TOKEN.totalSupply() *
             PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
-        uint256 currentBalance = _TOKEN.balanceOf(msg.sender);
-
-        uint256 previousPrice = _votedForPrice[_votingNumber][msg.sender];
-        uint256 previousStacked = _stackedTokens[_votingNumber][msg.sender];
+        uint256 currentBalance = balanceOf(msg.sender);
 
         require(
             _votedForPrice[_votingNumber][msg.sender] == 0,
@@ -189,10 +187,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 "The account cannot vote"
             );
             emit VoteCasted(msg.sender, _votingNumber, price, currentBalance);
-        }
-
-        if (previousPrice != 0) {
-            _pendingPriceVotes[_votingNumber][previousPrice] -= previousStacked;
         }
 
         _pendingPriceVotes[_votingNumber][price] += currentBalance;

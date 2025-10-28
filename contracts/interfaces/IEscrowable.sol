@@ -9,7 +9,11 @@ interface IEscrowable {
 
     function withdraw(uint256 amount) external;
 
-    function transfer(address to, uint256 amount) external;
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) external returns (bool);
 
     function balanceOf(address user) external view returns (uint256);
 

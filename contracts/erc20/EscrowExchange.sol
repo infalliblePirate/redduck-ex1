@@ -65,15 +65,21 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         require(_TOKEN.transfer(msg.sender, amount), "Transfer failed");
     }
 
-    function transfer(address to, uint256 amount) public override {
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public override returns (bool) {
+        require(from != address(0), "Invalid sender");
         require(to != address(0), "Invalid recipient");
-        require(_balances[msg.sender] >= amount, "Insufficient balance");
+        require(_balances[from] >= amount, "Insufficient balance");
 
-        _balances[msg.sender] -= amount;
+        _balances[from] -= amount;
         _balances[to] += amount;
+        return true;
     }
 
-    function balanceOf(address user) external view override returns (uint256) {
+    function balanceOf(address user) public view override returns (uint256) {
         return _balances[user];
     }
 
@@ -81,7 +87,7 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return _TOKEN;
     }
 
-    function buy() external payable override returns (bool) {
+    function buy() external payable virtual override returns (bool) {
         return _buy(msg.value);
     }
 
@@ -109,7 +115,7 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return true;
     }
 
-    function sell(uint256 value) external override returns (bool) {
+    function sell(uint256 value) external virtual override returns (bool) {
         return _sell(value);
     }
 
@@ -154,11 +160,24 @@ contract EscrowExchange is IEscrowable, IExchangable, Ownable {
         return _price;
     }
 
+    /// @inheritdoc IExchangable
     function setPrice(
-        uint256 newPrice
+        uint256 price_
     ) external override onlyOwner returns (bool) {
-        require(newPrice > 0, "Price must be positive");
-        _price = newPrice;
+        require(price_ > 0, "Price must be positive");
+        _price = price_;
+        return true;
+    }
+
+    /**
+     * @notice Internal function to update the token price
+     * @dev Can be called by owner or derived contracts (e.g., voting mechanism)
+     * @param price_ New price per token in wei
+     * @return success Always returns true
+     */
+    function _setPrice(uint256 price_) internal returns (bool) {
+        require(_price > 0, "Price must be positive");
+        _price = price_;
         return true;
     }
 
