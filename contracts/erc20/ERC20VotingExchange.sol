@@ -44,6 +44,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     mapping(uint256 => mapping(address => uint256)) private _stackedTokens; // user -> balance
     mapping(uint256 => mapping(address => uint256)) private _votedForPrice; // user -> price
+    mapping(uint256 => mapping(uint256 => bool)) private _priceExists; // user -> price
 
     /**
      * @notice Creates a new voting-enabled exchange
@@ -70,29 +71,22 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _;
     }
 
-    function _updateStacked(address user) internal {
-        if (_votedForPrice[_votingNumber][user] == 0) return;
-
-        uint256 currentBalance = _TOKEN.balanceOf(user);
-        if (currentBalance > _stackedTokens[_votingNumber][user]) {
-            _stackedTokens[_votingNumber][user] = currentBalance;
-        }
-    }
-
     function _updateVoteWeight(address user) internal {
         uint256 votedPrice = _votedForPrice[_votingNumber][user];
         if (votedPrice == 0) return;
 
         uint256 currentBalance = _TOKEN.balanceOf(user);
         uint256 previousStacked = _stackedTokens[_votingNumber][user];
-        if (currentBalance < previousStacked) {
-            _pendingPriceVotes[_votingNumber][votedPrice] -=
-                previousStacked - currentBalance;
-        } else if (currentBalance > previousStacked) {
+
+        if (currentBalance > previousStacked) {
             _pendingPriceVotes[_votingNumber][votedPrice] +=
                 currentBalance - previousStacked;
+        } else if (currentBalance < previousStacked) {
+            _pendingPriceVotes[_votingNumber][votedPrice] -=
+                previousStacked - currentBalance;
         }
-        _updateStacked(user);
+
+        _stackedTokens[_votingNumber][user] = currentBalance;
     }
 
     /**
@@ -105,7 +99,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         // _stackedTokens[_votingNumber][msg.sender] += // how do i obtain how many tokens I bought
         bool ok = _buy(msg.value);
         if (ok) {
-            _updateStacked(msg.sender);
+            _updateVoteWeight(msg.sender);
         }
         return ok;
     }
@@ -119,7 +113,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     function sell(uint256 value) external override returns (bool) {
         bool ok = _sell(value);
         if (ok) {
-            _updateStacked(msg.sender);
+            _updateVoteWeight(msg.sender);
         }
         return ok;
     }
@@ -169,7 +163,12 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 previousPrice = _votedForPrice[_votingNumber][msg.sender];
         uint256 previousStacked = _stackedTokens[_votingNumber][msg.sender];
 
-        bool isPriceNew = _pendingPriceVotes[_votingNumber][price] == 0;
+        require(
+            _votedForPrice[_votingNumber][msg.sender] == 0,
+            "Already voted"
+        );
+
+        bool isPriceNew = !_priceExists[_votingNumber][price];
 
         if (isPriceNew) {
             require(
@@ -177,6 +176,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 "The account cannot suggest price"
             );
             _suggestedPrices[_votingNumber].push(price);
+            _priceExists[_votingNumber][price] = true;
             emit PriceSuggested(
                 msg.sender,
                 _votingNumber,
