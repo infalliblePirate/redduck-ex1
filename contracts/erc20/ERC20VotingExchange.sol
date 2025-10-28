@@ -46,6 +46,8 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
     mapping(uint256 => mapping(address => uint256)) private _votedForPrice; // user -> price
     mapping(uint256 => mapping(uint256 => bool)) private _priceExists;
 
+    uint256 internal _winningPrice;
+
     /**
      * @notice Creates a new voting-enabled exchange
      * @param erc20 Address of the erc20 contract
@@ -102,6 +104,7 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         if (ok) {
             _updateVoteWeight(msg.sender);
         }
+        _updateWinner(_votedForPrice[_votingNumber][msg.sender]);
         return ok;
     }
 
@@ -116,6 +119,7 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         if (ok) {
             _updateVoteWeight(msg.sender);
         }
+        _updateWinner(_votedForPrice[_votingNumber][msg.sender]);
         return ok;
     }
 
@@ -132,6 +136,7 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
             _updateVoteWeight(msg.sender);
             _updateVoteWeight(to);
         }
+        _updateWinner(_votedForPrice[_votingNumber][to]);
         return ok;
     }
 
@@ -149,6 +154,15 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         }
 
         emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
+    }
+
+    function _updateWinner(uint256 price) internal {
+        if (
+            _pendingPriceVotes[_votingNumber][price] >
+            _pendingPriceVotes[_votingNumber][_winningPrice]
+        ) {
+            _winningPrice = price;
+        }
     }
 
     /// @inheritdoc IVotable
@@ -192,6 +206,7 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         _pendingPriceVotes[_votingNumber][price] += currentBalance;
         _stackedTokens[_votingNumber][msg.sender] = currentBalance;
         _votedForPrice[_votingNumber][msg.sender] = price;
+        _updateWinner(price);
     }
 
     /// @inheritdoc IVotable
@@ -202,26 +217,10 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
             "Voting is still in progress"
         );
 
-        uint256 winningPrice = 0;
-        uint256 highestVotes = 0;
-
-        uint256[] storage prices = _suggestedPrices[_votingNumber];
-        for (uint256 i = 0; i < prices.length; i++) {
-            uint256 price = prices[i];
-            uint256 votes = _pendingPriceVotes[_votingNumber][price];
-            if (votes > highestVotes) {
-                highestVotes = votes;
-                winningPrice = price;
-            }
-        }
-
-        if (winningPrice > 0) {
-            _setPrice(winningPrice);
-        }
-
+        emit EndVoting(_votingNumber, _winningPrice);
+        _setPrice(_winningPrice);
+        _winningPrice = 0;
         _votingStartedTimeStamp = 0;
-
-        emit EndVoting(_votingNumber, winningPrice);
     }
 
     /// @inheritdoc IVotable
