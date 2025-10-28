@@ -34,11 +34,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev Increments with each new voting session
     uint256 private _votingNumber;
 
-    /// @notice Tracks whether an address has participated in a specific voting round
-    /// @dev votingNumber => address => hasVoted
-    /// @dev Prevents double voting and locks tokens during active voting
-    mapping(uint256 => mapping(address => bool)) private _isBalanceLocked;
-
     /// @notice Total voting weight for each price suggestion in each round
     /// @dev votingNumber => price => totalVotes
     mapping(uint256 => mapping(uint256 => uint256)) private _pendingPriceVotes;
@@ -46,6 +41,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @notice Array of all suggested prices for each voting round
     /// @dev votingNumber => array of suggested prices
     mapping(uint256 => uint256[]) private _suggestedPrices;
+
+    mapping(uint256 => mapping(address => uint256)) private _stackedTokens; // user -> balance
+    mapping(uint256 => mapping(address => uint256)) private _votedForPrice; // user -> price
 
     /**
      * @notice Creates a new voting-enabled exchange
@@ -60,18 +58,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     ) ERC20Exchange(erc20, price_, feeBasisPoints) {}
 
     /**
-     * @notice Restricts function access to accounts that haven't voted in current round
-     * @dev Prevents buying, selling, or transferring when user is participating in active voting
-     */
-    modifier onlyNotVoted() {
-        require(
-            !_isBalanceLocked[_votingNumber][msg.sender],
-            "The account has voted, cannot buy, sell or transfer"
-        );
-        _;
-    }
-
-    /**
      * @notice Ensures a voting round is currently active
      * @dev Checks that voting has started and hasn't exceeded TIME_TO_VOTE duration
      */
@@ -84,13 +70,44 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _;
     }
 
+    function _updateStacked(address user) internal {
+        if (_votedForPrice[_votingNumber][user] == 0) return;
+
+        uint256 currentBalance = _TOKEN.balanceOf(user);
+        if (currentBalance > _stackedTokens[_votingNumber][user]) {
+            _stackedTokens[_votingNumber][user] = currentBalance;
+        }
+    }
+
+    function _updateVoteWeight(address user) internal {
+        uint256 votedPrice = _votedForPrice[_votingNumber][user];
+        if (votedPrice == 0) return;
+
+        uint256 currentBalance = _TOKEN.balanceOf(user);
+        uint256 previousStacked = _stackedTokens[_votingNumber][user];
+        if (currentBalance < previousStacked) {
+            _pendingPriceVotes[_votingNumber][votedPrice] -=
+                previousStacked - currentBalance;
+        } else if (currentBalance > previousStacked) {
+            _pendingPriceVotes[_votingNumber][votedPrice] +=
+                currentBalance - previousStacked;
+        }
+        _updateStacked(user);
+    }
+
     /**
      * @notice Buy tokens with ETH (restricted during voting participation)
      * @dev Overrides parent function to add voting participation check
      * @return success True if purchase was successful
      */
-    function buy() external payable override onlyNotVoted returns (bool) {
-        return _buy(msg.value);
+    function buy() external payable override returns (bool) {
+        // require(mapping[msg.sender] >= msg.value); shot ne to
+        // _stackedTokens[_votingNumber][msg.sender] += // how do i obtain how many tokens I bought
+        bool ok = _buy(msg.value);
+        if (ok) {
+            _updateStacked(msg.sender);
+        }
+        return ok;
     }
 
     /**
@@ -99,8 +116,12 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @param value Amount of tokens to sell
      * @return success True if sale was successful
      */
-    function sell(uint256 value) external override onlyNotVoted returns (bool) {
-        return _sell(value);
+    function sell(uint256 value) external override returns (bool) {
+        bool ok = _sell(value);
+        if (ok) {
+            _updateStacked(msg.sender);
+        }
+        return ok;
     }
 
     /**
@@ -110,11 +131,13 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      * @param value Amount of tokens to transfer
      * @return success True if transfer was successful
      */
-    function transfer(
-        address to,
-        uint256 value
-    ) external onlyNotVoted returns (bool) {
-        return _TOKEN.transfer(to, value);
+    function transfer(address to, uint256 value) external returns (bool) {
+        bool ok = _TOKEN.transferFrom(msg.sender, to, value);
+        if (ok) {
+            _updateVoteWeight(msg.sender);
+            _updateVoteWeight(to);
+        }
+        return ok;
     }
 
     /// @inheritdoc IVotable
@@ -134,47 +157,47 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /// @inheritdoc IVotable
-    function vote(uint256 price) external override onlyNotVoted votingActive {
-        uint256 requiredSupply = (_TOKEN.totalSupply() * VOTE_THRESHOLD_BPS) /
-            BPS_DENOMINATOR;
-        uint256 weight = _TOKEN.balanceOf(msg.sender);
+    function vote(uint256 price) external override votingActive {
+        uint256 requiredSupplyToVote = (_TOKEN.totalSupply() *
+            VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
-        require(weight >= requiredSupply, "The account cannot vote");
-        require(
-            _pendingPriceVotes[_votingNumber][price] > 0,
-            "Price has not been suggested"
-        );
-
-        _isBalanceLocked[_votingNumber][msg.sender] = true;
-        _pendingPriceVotes[_votingNumber][price] += weight;
-
-        emit VoteCasted(msg.sender, _votingNumber, price, weight);
-    }
-
-    /// @inheritdoc IVotable
-    function suggestNewPrice(
-        uint256 price
-    ) external override onlyNotVoted votingActive {
-        uint256 requiredSupply = (_TOKEN.totalSupply() *
+        uint256 requiredSupplyToSuggest = (_TOKEN.totalSupply() *
             PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
-        uint256 weight = _TOKEN.balanceOf(msg.sender);
 
-        require(weight >= requiredSupply, "The account cannot suggest price");
-        require(
-            _pendingPriceVotes[_votingNumber][price] == 0,
-            "Price has already been suggested"
-        );
+        uint256 currentBalance = _TOKEN.balanceOf(msg.sender);
 
-        _pendingPriceVotes[_votingNumber][price] += weight;
-        _suggestedPrices[_votingNumber].push(price);
-        _isBalanceLocked[_votingNumber][msg.sender] = true;
+        uint256 previousPrice = _votedForPrice[_votingNumber][msg.sender];
+        uint256 previousStacked = _stackedTokens[_votingNumber][msg.sender];
 
-        emit PriceSuggested(
-            msg.sender,
-            _votingNumber,
-            price,
-            _TOKEN.balanceOf(msg.sender)
-        );
+        bool isPriceNew = _pendingPriceVotes[_votingNumber][price] == 0;
+
+        if (isPriceNew) {
+            require(
+                currentBalance >= requiredSupplyToSuggest,
+                "The account cannot suggest price"
+            );
+            _suggestedPrices[_votingNumber].push(price);
+            emit PriceSuggested(
+                msg.sender,
+                _votingNumber,
+                price,
+                currentBalance
+            );
+        } else {
+            require(
+                currentBalance >= requiredSupplyToVote,
+                "The account cannot vote"
+            );
+            emit VoteCasted(msg.sender, _votingNumber, price, currentBalance);
+        }
+
+        if (previousPrice != 0) {
+            _pendingPriceVotes[_votingNumber][previousPrice] -= previousStacked;
+        }
+
+        _pendingPriceVotes[_votingNumber][price] += currentBalance;
+        _stackedTokens[_votingNumber][msg.sender] = currentBalance;
+        _votedForPrice[_votingNumber][msg.sender] = price;
     }
 
     /// @inheritdoc IVotable

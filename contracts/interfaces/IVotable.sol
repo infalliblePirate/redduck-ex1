@@ -64,15 +64,6 @@ interface IVotable {
     function startVoting() external;
 
     /**
-     * @notice Suggest a new price for the token
-     * @dev Caller must hold at least PRICE_SUGGESTION_THRESHOLD_BPS of total supply
-     * @dev Price must not have been suggested in current voting round
-     * @dev Locks caller's tokens until voting ends
-     * @param price Suggested price in wei per token
-     */
-    function suggestNewPrice(uint256 price) external;
-
-    /**
      * @notice Vote for an already suggested price
      * @dev Caller must hold at least VOTE_THRESHOLD_BPS of total supply
      * @dev Price must have been previously suggested in current round
