@@ -20,11 +20,16 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev 5 basis points = 0.05% of total supply
     uint8 public constant VOTE_THRESHOLD_BPS = 5;
 
-    uint256 public constant ETH_TO_SUGGEST_WINNER = 0.5 ether;
-
     /// @notice Denominator for basis point calculations
     /// @dev 10,000 basis points = 100%
     uint16 public constant BPS_DENOMINATOR = 10_000;
+
+    uint256 public constant ETH_TO_SUGGEST_WINNER = 0.5 ether;
+
+    uint8 private constant SLASHING_PERCENTAGE = 50;
+    uint8 private constant SLASHING_DENOMINATOR = 100;
+
+    uint256 public constant FINALIZE_REWARD = 0.01 ether;
 
     /// @notice Timestamp when the current voting round started
     /// @dev Set to 0 when no voting is active
@@ -36,9 +41,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     mapping(uint256 => mapping(uint256 => uint256)) _votesForPrice; // [votingNumber][price] => votes
 
-    mapping(address => uint256) _lockedTokens; // user => lockedTokens
-    mapping(address => uint256) _stackedEth; // user => stackedEth
-    uint256 internal _rewardPool;
+    mapping(uint256 => mapping(address => uint256)) _lockedTokens; // user => lockedTokens
+    mapping(uint256 => mapping(address => uint256)) _stackedEth; // user => stackedEth
 
     /// @notice Voting results for each voting round
     /// @dev votingNumber => VotingResult
@@ -118,6 +122,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 price,
         uint256 tokensLocked
     ) external override votingActive {
+        require(price > 0, "Price must be above 0");
         require(
             tokensLocked <= _TOKEN.balanceOf(msg.sender),
             "The locked tokens amount exceeds user balance"
@@ -125,7 +130,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         uint256 requiredSupplyToVote = (_TOKEN.totalSupply() *
             VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
-
         require(
             tokensLocked >= requiredSupplyToVote,
             "Not enough tokens to vote"
@@ -133,7 +137,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         _votesForPrice[_votingNumber][price] += tokensLocked;
 
-        _lockedTokens[msg.sender] += tokensLocked;
+        _lockedTokens[_votingNumber][msg.sender] += tokensLocked;
         _TOKEN.transferFrom(msg.sender, address(this), tokensLocked);
 
         emit VoteCasted(msg.sender, _votingNumber, price, tokensLocked);
@@ -164,11 +168,19 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 block.timestamp < result.proposedAt + CHALLENGE_PERIOD,
                 "Challenge period expired, call finalizeVoting()"
             );
-            _stackedEth[result.proposer] -= ETH_TO_SUGGEST_WINNER;
-            _rewardPool += ETH_TO_SUGGEST_WINNER;
+            if (
+                _votesForPrice[_votingNumber][winningPrice] >
+                _votesForPrice[_votingNumber][result.claimedWinningPrice]
+            ) {
+                uint256 slashedBalance = (_stackedEth[_votingNumber][
+                    result.proposer
+                ] * SLASHING_PERCENTAGE) / SLASHING_DENOMINATOR;
+                _stackedEth[_votingNumber][result.proposer] -= slashedBalance;
+                _stackedEth[_votingNumber][msg.sender] += slashedBalance;
+            }
         }
 
-        _stackedEth[msg.sender] += msg.value;
+        _stackedEth[_votingNumber][msg.sender] += msg.value;
 
         result.claimedWinningPrice = winningPrice;
         result.proposer = msg.sender;
@@ -190,6 +202,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             block.timestamp >= result.proposedAt + CHALLENGE_PERIOD,
             "Challenge period not ended"
         );
+        require(
+            payable(address(this)).balance >= FINALIZE_REWARD,
+            "Not enough liquidty to reward finalization"
+        );
 
         if (result.claimedWinningPrice > 0) {
             _setPrice(result.claimedWinningPrice);
@@ -199,24 +215,27 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         result.finalized = true;
 
         _votingStartedTimeStamp = 0;
+        payable(msg.sender).transfer(FINALIZE_REWARD);
     }
 
-    function withdrawTokens() external {
-        VotingResult storage result = _votingResults[_votingNumber];
+    function withdrawTokens(uint256 votingNumber_) external {
+        VotingResult storage result = _votingResults[votingNumber_];
         require(result.finalized, "The result is not yet finalized");
-        _TOKEN.transfer(msg.sender, _lockedTokens[msg.sender]);
-        _lockedTokens[msg.sender] = 0;
+
+        uint256 balance = _lockedTokens[votingNumber_][msg.sender];
+        _lockedTokens[votingNumber_][msg.sender] = 0;
+
+        _TOKEN.transfer(msg.sender, balance);
     }
 
-    function withdrawEth() external {
-        VotingResult storage result = _votingResults[_votingNumber];
-        uint256 ethToTransfer = _stackedEth[msg.sender];
-        if (result.proposer == msg.sender) {
-            ethToTransfer += _rewardPool;
-            _rewardPool = 0;
-        }
-        payable(msg.sender).transfer(ethToTransfer);
-        _stackedEth[msg.sender] = 0;
+    function withdrawEth(uint256 votingNumber_) external {
+        VotingResult storage result = _votingResults[votingNumber_];
+        require(result.finalized, "The voting isn't finalized");
+
+        uint256 balance = _stackedEth[votingNumber_][msg.sender];
+        _stackedEth[votingNumber_][msg.sender] = 0;
+
+        payable(msg.sender).transfer(balance);
     }
 
     /// @notice Get the current voting number

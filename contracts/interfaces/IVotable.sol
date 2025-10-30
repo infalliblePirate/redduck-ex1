@@ -83,7 +83,7 @@ interface IVotable {
      * @dev Locks caller's tokens until voting ends
      * @param price Price to vote for
      */
-    function vote(uint256 price) external;
+    function vote(uint256 price, uint256 tokensLocked) external;
 
     /**
      * @notice Get the timestamp when the current voting round started
@@ -92,24 +92,9 @@ interface IVotable {
      */
     function votingStartedTimeStamp() external view returns (uint256);
 
-    function votedAddresses(
-        uint256 votingNumber_,
-        uint256 price
-    ) external view returns (address[] memory);
-
     function votingResult(
         uint256 votingNumber_
     ) external view returns (VotingResult memory);
-
-    /**
-     * @notice Get all suggested prices for a specific voting round
-     * @return prices Array of all suggested prices in that round
-     */
-    function suggestedPrices(
-        uint256 votingNumber
-    ) external view returns (uint256[] memory);
-
-    function challengeResult(uint256 claimedWinningPrice) external;
 
     function finalizeVoting() external;
 }
