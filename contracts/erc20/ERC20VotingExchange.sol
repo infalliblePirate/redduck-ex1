@@ -171,6 +171,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         VotingResult storage result = _votingResults[_votingNumber];
 
+        require(!result.finalized, "Already finalized");
+
         require(
             result.isChallenged || result.proposer == address(0),
             "Previous proposing result pending"
@@ -181,6 +183,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         result.claimedWinningPrice = winningPrice;
         result.proposer = msg.sender;
         result.proposedAt = block.timestamp;
+        result.isChallenged = false;
 
         emit ResultProposed(
             msg.sender,
@@ -190,7 +193,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
     }
 
-    function challenge(uint256 challengingPrice) external payable {
+    function challenge(uint256 challengingPrice) external {
         VotingResult storage result = _votingResults[_votingNumber];
         require(
             block.timestamp < result.proposedAt + CHALLENGE_PERIOD,
@@ -202,6 +205,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
                 _votesForPrice[_votingNumber][result.claimedWinningPrice],
             "Challenging failed"
         );
+
+        require(!result.isChallenged, "The price was already challenged");
 
         uint256 slashedBalance = (_stackedEth[_votingNumber][result.proposer] *
             SLASHING_PERCENTAGE) / SLASHING_DENOMINATOR;
