@@ -138,7 +138,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _votesForPrice[_votingNumber][price] += tokensLocked;
 
         _lockedTokens[_votingNumber][msg.sender] += tokensLocked;
-        _TOKEN.transferFrom(msg.sender, address(this), tokensLocked);
+        require(
+            _TOKEN.transferFrom(msg.sender, address(this), tokensLocked),
+            "Transfering failed"
+        );
 
         emit VoteCasted(msg.sender, _votingNumber, price, tokensLocked);
     }
@@ -225,7 +228,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 balance = _lockedTokens[votingNumber_][msg.sender];
         _lockedTokens[votingNumber_][msg.sender] = 0;
 
-        _TOKEN.transfer(msg.sender, balance);
+        require(_TOKEN.transfer(msg.sender, balance), "Transfering failed");
     }
 
     function withdrawEth(uint256 votingNumber_) external {
