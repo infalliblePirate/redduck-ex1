@@ -12,7 +12,7 @@ import "../interfaces/IVotable.sol";
 
 contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @notice Duration of each voting round
-    uint256 public constant TIME_TO_VOTE = 5 minutes;
+    uint256 public constant TIME_TO_VOTE = 3 days;
 
     uint32 public constant CHALLENGE_PERIOD = 1 days;
 
@@ -48,6 +48,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev votingNumber => VotingResult
     mapping(uint256 => VotingResult) private _votingResults;
 
+    mapping(uint256 => mapping(address => bool)) private _hasVoted;
+
     /**
      * @notice Creates a new voting-enabled exchange
      * @param erc20 Address of the ERC20 token contract
@@ -71,6 +73,15 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "No active voting"
         );
         _;
+    }
+
+    modifier oneVote() {
+        require(
+            _hasVoted[_votingNumber][msg.sender] == false,
+            "User already voted"
+        );
+        _;
+        _hasVoted[_votingNumber][msg.sender] = true;
     }
 
     /**
@@ -121,7 +132,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     function vote(
         uint256 price,
         uint256 tokensLocked
-    ) external override votingActive {
+    ) external override votingActive oneVote {
         require(price > 0, "Price must be above 0");
         require(
             tokensLocked <= _TOKEN.balanceOf(msg.sender),
@@ -146,7 +157,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         emit VoteCasted(msg.sender, _votingNumber, price, tokensLocked);
     }
 
-    function proposeWinner(uint256 winningPrice) external payable {
+    function propose(uint256 winningPrice) external payable {
         require(_votingStartedTimeStamp != 0, "No voting in progress");
         require(
             block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
@@ -161,27 +172,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         VotingResult storage result = _votingResults[_votingNumber];
 
         require(
-            _votesForPrice[_votingNumber][winningPrice] >
-                _votesForPrice[_votingNumber][result.claimedWinningPrice],
-            "New winning price must have more votes than current price"
+            result.isChallenged || result.proposer == address(0),
+            "Previous proposing result pending"
         );
-
-        if (result.proposer != address(0)) {
-            require(
-                block.timestamp < result.proposedAt + CHALLENGE_PERIOD,
-                "Challenge period expired, call finalizeVoting()"
-            );
-            if (
-                _votesForPrice[_votingNumber][winningPrice] >
-                _votesForPrice[_votingNumber][result.claimedWinningPrice]
-            ) {
-                uint256 slashedBalance = (_stackedEth[_votingNumber][
-                    result.proposer
-                ] * SLASHING_PERCENTAGE) / SLASHING_DENOMINATOR;
-                _stackedEth[_votingNumber][result.proposer] -= slashedBalance;
-                _stackedEth[_votingNumber][msg.sender] += slashedBalance;
-            }
-        }
 
         _stackedEth[_votingNumber][msg.sender] += msg.value;
 
@@ -195,6 +188,28 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             winningPrice,
             block.timestamp
         );
+    }
+
+    function challenge(uint256 challengingPrice) external payable {
+        VotingResult storage result = _votingResults[_votingNumber];
+        require(
+            block.timestamp < result.proposedAt + CHALLENGE_PERIOD,
+            "Challenge period expired, call finalizeVoting()"
+        );
+
+        require(
+            _votesForPrice[_votingNumber][challengingPrice] >
+                _votesForPrice[_votingNumber][result.claimedWinningPrice],
+            "Challenging failed"
+        );
+
+        uint256 slashedBalance = (_stackedEth[_votingNumber][result.proposer] *
+            SLASHING_PERCENTAGE) / SLASHING_DENOMINATOR;
+
+        _stackedEth[_votingNumber][result.proposer] -= slashedBalance;
+        _stackedEth[_votingNumber][msg.sender] += slashedBalance;
+
+        result.isChallenged = true;
     }
 
     function finalizeVoting() external override {
@@ -241,29 +256,52 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         payable(msg.sender).transfer(balance);
     }
 
-    /// @notice Get the current voting number
-    /// @return Current voting round number
+    /// @inheritdoc IVotable
     function votingNumber() external view returns (uint256) {
         return _votingNumber;
     }
 
     /// @inheritdoc IVotable
-    function votingStartedTimeStamp()
-        external
-        view
-        override
-        onlyOwner
-        returns (uint256)
-    {
+    function votingStartedTimeStamp() external view override returns (uint256) {
         return _votingStartedTimeStamp;
     }
 
-    /// @notice Get voting result for a specific voting round
-    /// @param votingNumber_ The voting round number
-    /// @return The voting result struct
+    /// @inheritdoc IVotable
     function votingResult(
         uint256 votingNumber_
     ) external view override returns (VotingResult memory) {
         return _votingResults[votingNumber_];
+    }
+
+    /// @inheritdoc IVotable
+    function votesForPrice(
+        uint256 votingNumber_,
+        uint256 price
+    ) external view returns (uint256) {
+        return _votesForPrice[votingNumber_][price];
+    }
+
+    /// @inheritdoc IVotable
+    function lockedTokens(
+        uint256 votingNumber_,
+        address user
+    ) external view returns (uint256) {
+        return _lockedTokens[votingNumber_][user];
+    }
+
+    /// @inheritdoc IVotable
+    function stackedEth(
+        uint256 votingNumber_,
+        address user
+    ) external view returns (uint256) {
+        return _stackedEth[votingNumber_][user];
+    }
+
+    /// @inheritdoc IVotable
+    function hasVoted(
+        uint256 votingNumber_,
+        address user
+    ) external view returns (bool) {
+        return _hasVoted[votingNumber_][user];
     }
 }

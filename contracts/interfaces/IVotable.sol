@@ -61,6 +61,7 @@ interface IVotable {
         uint256 claimedWinningPrice;
         address proposer;
         uint256 proposedAt;
+        bool isChallenged;
         bool finalized;
     }
 
@@ -97,4 +98,54 @@ interface IVotable {
     ) external view returns (VotingResult memory);
 
     function finalizeVoting() external;
+
+    /**
+     * @notice Get the current voting number
+     * @return Current voting round number
+     */
+    function votingNumber() external view returns (uint256);
+
+    /**
+     * @notice Get votes for a specific price in a voting round
+     * @param votingNumber_ The voting round number
+     * @param price The price to query
+     * @return Number of votes for that price
+     */
+    function votesForPrice(
+        uint256 votingNumber_,
+        uint256 price
+    ) external view returns (uint256);
+
+    /**
+     * @param votingNumber_ The voting round number
+     * @notice Get locked tokens for a user in a voting round
+     * @param user The user address
+     * @return Number of locked tokens
+     */
+    function lockedTokens(
+        uint256 votingNumber_,
+        address user
+    ) external view returns (uint256);
+
+    /**
+     * @notice Get stacked ETH for a user in a voting round
+     * @param votingNumber_ The voting round number
+     * @param user The user address
+     * @return Amount of stacked ETH
+     */
+    function stackedEth(
+        uint256 votingNumber_,
+        address user
+    ) external view returns (uint256);
+
+    /**
+     * @notice Check if a user has voted in a voting round
+     * @param votingNumber_ The voting round number
+     * @param user The user address
+     * @return True if user has voted
+     */
+    function hasVoted(
+        uint256 votingNumber_,
+        address user
+    ) external view returns (bool);
 }
