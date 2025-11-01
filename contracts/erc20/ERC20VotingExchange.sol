@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import "./ERC20Exchange.sol";
-import "./EscrowExchange.sol";
 import "../interfaces/IVotable.sol";
 
 /**
@@ -10,13 +9,9 @@ import "../interfaces/IVotable.sol";
  * @author Kateryna Pavlenko
  */
 
-contract ERC20VotingExchange is IVotable, EscrowExchange {
+contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @notice Duration of each voting round
-    uint256 public constant TIME_TO_VOTE = 5 minutes;
-
-    /// @notice Minimum token ownership (in basis points) required to suggest a new price
-    /// @dev 10 basis points = 0.1% of total supply
-    uint8 public constant PRICE_SUGGESTION_THRESHOLD_BPS = 10;
+    uint256 public constant TIME_TO_VOTE = 1 days;
 
     /// @notice Minimum token ownership (in basis points) required to vote on a price
     /// @dev 5 basis points = 0.05% of total supply
@@ -38,15 +33,11 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
     /// @dev votingNumber => price => totalVotes
     mapping(uint256 => mapping(uint256 => uint256)) private _pendingPriceVotes;
 
-    /// @notice Array of all suggested prices for each voting round
-    /// @dev votingNumber => array of suggested prices
-    mapping(uint256 => uint256[]) private _suggestedPrices;
-
-    mapping(uint256 => mapping(address => uint256)) private _stackedTokens; // user -> balance
-    mapping(uint256 => mapping(address => uint256)) private _votedForPrice; // user -> price
-    mapping(uint256 => mapping(uint256 => bool)) private _priceExists;
+    mapping(uint256 => mapping(address => uint256)) private _balances;
 
     uint256 internal _winningPrice;
+
+    mapping(uint256 => bool) internal _isEnded;
 
     /**
      * @notice Creates a new voting-enabled exchange
@@ -58,7 +49,7 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         address erc20,
         uint256 price_,
         uint8 feeBasisPoints
-    ) EscrowExchange(erc20, price_, feeBasisPoints) {}
+    ) ERC20Exchange(erc20, price_, feeBasisPoints) {}
 
     /**
      * @notice Ensures a voting round is currently active
@@ -73,71 +64,12 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         _;
     }
 
-    function _updateVoteWeight(address user) internal {
-        uint256 votedPrice = _votedForPrice[_votingNumber][user];
-        if (votedPrice == 0) return;
-
-        uint256 currentBalance = balanceOf(user);
-        uint256 previousStacked = _stackedTokens[_votingNumber][user];
-
-        if (currentBalance > previousStacked) {
-            _pendingPriceVotes[_votingNumber][votedPrice] +=
-                currentBalance - previousStacked;
-        } else if (currentBalance < previousStacked) {
-            uint256 dec = previousStacked - currentBalance;
-            uint256 total = _pendingPriceVotes[_votingNumber][votedPrice];
-            _pendingPriceVotes[_votingNumber][votedPrice] = dec >= total
-                ? 0
-                : total - dec;
-        }
-
-        _stackedTokens[_votingNumber][user] = currentBalance;
-    }
-
-    /**
-     * @notice Buy tokens with ETH (restricted during voting participation)
-     * @dev Overrides parent function to add voting participation check
-     * @return success True if purchase was successful
-     */
-    function buy() external payable override returns (bool) {
-        bool ok = _buy(msg.value);
-        if (ok) {
-            _updateVoteWeight(msg.sender);
-        }
-        _updateWinner(_votedForPrice[_votingNumber][msg.sender]);
-        return ok;
-    }
-
-    /**
-     * @notice Sell tokens for ETH (restricted during voting participation)
-     * @dev Overrides parent function to add voting participation check
-     * @param value Amount of tokens to sell
-     * @return success True if sale was successful
-     */
-    function sell(uint256 value) external override returns (bool) {
-        bool ok = _sell(value);
-        if (ok) {
-            _updateVoteWeight(msg.sender);
-        }
-        _updateWinner(_votedForPrice[_votingNumber][msg.sender]);
-        return ok;
-    }
-
-    /**
-     * @notice Transfer tokens to another address (restricted during voting participation)
-     * @dev Prevents token transfers while user has active vote/suggestion
-     * @param to Recipient address
-     * @param value Amount of tokens to transfer
-     * @return success True if transfer was successful
-     */
-    function transfer(address to, uint256 value) external returns (bool) {
-        bool ok = transferFrom(msg.sender, to, value);
-        if (ok) {
-            _updateVoteWeight(msg.sender);
-            _updateVoteWeight(to);
-        }
-        _updateWinner(_votedForPrice[_votingNumber][to]);
-        return ok;
+    modifier oneVote() {
+        require(
+            _balances[_votingNumber][msg.sender] == 0,
+            "User already voted"
+        );
+        _;
     }
 
     /// @inheritdoc IVotable
@@ -152,7 +84,6 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         unchecked {
             _votingNumber++;
         }
-
         emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
     }
 
@@ -166,46 +97,23 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
     }
 
     /// @inheritdoc IVotable
-    function vote(uint256 price) external override votingActive {
+    function vote(
+        uint256 price,
+        uint256 tokens
+    ) external override votingActive oneVote {
         uint256 requiredSupplyToVote = (_TOKEN.totalSupply() *
             VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
-        uint256 requiredSupplyToSuggest = (_TOKEN.totalSupply() *
-            PRICE_SUGGESTION_THRESHOLD_BPS) / BPS_DENOMINATOR;
+        uint256 balance = _TOKEN.balanceOf(msg.sender);
+        require(balance >= tokens, "Not enough tokens on balance");
 
-        uint256 currentBalance = balanceOf(msg.sender);
+        require(tokens >= requiredSupplyToVote, "Not enough tokens to vote");
 
-        require(
-            _votedForPrice[_votingNumber][msg.sender] == 0,
-            "Already voted"
-        );
+        require(price > 0, "Price must be greater than 0");
 
-        bool isPriceNew = !_priceExists[_votingNumber][price];
-
-        if (isPriceNew) {
-            require(
-                currentBalance >= requiredSupplyToSuggest,
-                "The account cannot suggest price"
-            );
-            _suggestedPrices[_votingNumber].push(price);
-            _priceExists[_votingNumber][price] = true;
-            emit PriceSuggested(
-                msg.sender,
-                _votingNumber,
-                price,
-                currentBalance
-            );
-        } else {
-            require(
-                currentBalance >= requiredSupplyToVote,
-                "The account cannot vote"
-            );
-            emit VoteCasted(msg.sender, _votingNumber, price, currentBalance);
-        }
-
-        _pendingPriceVotes[_votingNumber][price] += currentBalance;
-        _stackedTokens[_votingNumber][msg.sender] = currentBalance;
-        _votedForPrice[_votingNumber][msg.sender] = price;
+        _pendingPriceVotes[_votingNumber][price] += tokens;
+        _balances[_votingNumber][msg.sender] += tokens;
+        _TOKEN.transferFrom(msg.sender, address(this), tokens);
         _updateWinner(price);
     }
 
@@ -218,50 +126,34 @@ contract ERC20VotingExchange is IVotable, EscrowExchange {
         );
 
         emit EndVoting(_votingNumber, _winningPrice);
-        _setPrice(_winningPrice);
+        if (_winningPrice > 0) _setPrice(_winningPrice);
         _winningPrice = 0;
         _votingStartedTimeStamp = 0;
+        _isEnded[_votingNumber] = true;
     }
 
-    /// @inheritdoc IVotable
-    function votingNumber() external view override onlyOwner returns (uint256) {
-        return _votingNumber;
+    function withdrawTokens(uint256 votingNumber_) external {
+        require(!_isEnded[votingNumber_], "The voting hasn't ended");
+        uint256 balance = _balances[votingNumber_][msg.sender];
+        _balances[votingNumber_][msg.sender] = 0;
+        require(_TOKEN.transfer(msg.sender, balance), "Transfering reverted");
     }
 
     /// @inheritdoc IVotable
     function pendingPriceVotes(
         uint256 votingNumber_,
         uint256 price_
-    ) external view override onlyOwner returns (uint256) {
+    ) external view override returns (uint256) {
         return _pendingPriceVotes[votingNumber_][price_];
     }
 
     /// @inheritdoc IVotable
-    function currentVotingNumber()
-        external
-        view
-        override
-        onlyOwner
-        returns (uint256)
-    {
+    function currentVotingNumber() external view override returns (uint256) {
         return _votingNumber;
     }
 
     /// @inheritdoc IVotable
-    function votingStartedTimeStamp()
-        external
-        view
-        override
-        onlyOwner
-        returns (uint256)
-    {
+    function votingStartedTimeStamp() external view override returns (uint256) {
         return _votingStartedTimeStamp;
-    }
-
-    /// @inheritdoc IVotable
-    function getSuggestedPrices(
-        uint256 votingNumber_
-    ) external view override returns (uint256[] memory) {
-        return _suggestedPrices[votingNumber_];
     }
 }
