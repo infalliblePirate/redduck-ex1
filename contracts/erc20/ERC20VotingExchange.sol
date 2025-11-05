@@ -116,20 +116,19 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     /// @inheritdoc IVotable
     function endVoting() external override {
+        uint256 currentRound = _votingNumber;
+        Round storage round = _rounds[currentRound];
+
+        require(round.startTimestamp != 0, "No active voting");
+        require(!round.isEnded, "Voting already ended");
         require(
-            _rounds[_votingNumber].startTimestamp != 0,
-            "No voting in progress"
-        );
-        require(
-            block.timestamp >=
-                _rounds[_votingNumber].startTimestamp + TIME_TO_VOTE,
-            "Voting is still in progress"
+            block.timestamp >= round.startTimestamp + TIME_TO_VOTE,
+            "Voting period has not expired"
         );
 
-        uint256 winningPirce = _rounds[_votingNumber].winningPrice;
+        round.isEnded = true;
+        uint256 winningPirce = round.winningPrice;
         if (winningPirce > 0) _setPrice(winningPirce);
-
-        _rounds[_votingNumber].isEnded = true;
 
         emit EndVoting(_votingNumber, winningPirce);
     }
