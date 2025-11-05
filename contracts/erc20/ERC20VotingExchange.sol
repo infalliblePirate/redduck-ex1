@@ -139,12 +139,16 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     function withdrawTokens(uint256 votingNumber_) external {
         require(_isEnded[votingNumber_], "The voting hasn't ended");
-        
+
         uint256 balance = _balances[votingNumber_][msg.sender];
         require(balance > 0, "No tokens to withdraw");
 
         _balances[votingNumber_][msg.sender] = 0;
         require(_TOKEN.transfer(msg.sender, balance), "Transfering reverted");
+    }
+
+    function transfer(address to, uint256 value) external {
+        require(_TOKEN.transfer(to, value), "Transfering reverted");
     }
 
     /// @inheritdoc IVotable
