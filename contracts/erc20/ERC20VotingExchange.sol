@@ -112,9 +112,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         require(price > 0, "Price must be greater than 0");
 
         _pendingPriceVotes[_votingNumber][price] += tokens;
-        _balances[_votingNumber][msg.sender] += tokens;
+        _balances[_votingNumber][msg.sender] = tokens;
         _TOKEN.transferFrom(msg.sender, address(this), tokens);
         _updateWinner(price);
+
+        emit VoteCasted(msg.sender, _votingNumber, price, tokens);
     }
 
     /// @inheritdoc IVotable
@@ -125,16 +127,22 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "Voting is still in progress"
         );
 
-        emit EndVoting(_votingNumber, _winningPrice);
-        if (_winningPrice > 0) _setPrice(_winningPrice);
+        uint256 winningPirce = _winningPrice;
+        if (winningPirce > 0) _setPrice(winningPirce);
+
         _winningPrice = 0;
         _votingStartedTimeStamp = 0;
         _isEnded[_votingNumber] = true;
+
+        emit EndVoting(_votingNumber, winningPirce);
     }
 
     function withdrawTokens(uint256 votingNumber_) external {
-        require(!_isEnded[votingNumber_], "The voting hasn't ended");
+        require(_isEnded[votingNumber_], "The voting hasn't ended");
+        
         uint256 balance = _balances[votingNumber_][msg.sender];
+        require(balance > 0, "No tokens to withdraw");
+
         _balances[votingNumber_][msg.sender] = 0;
         require(_TOKEN.transfer(msg.sender, balance), "Transfering reverted");
     }
