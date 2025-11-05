@@ -21,23 +21,11 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @dev 10,000 basis points = 100%
     uint16 public constant BPS_DENOMINATOR = 10_000;
 
-    /// @notice Timestamp when the current voting round started
-    /// @dev Set to 0 when no voting is active
-    uint256 private _votingStartedTimeStamp;
-
     /// @notice Counter for voting rounds
     /// @dev Increments with each new voting session
     uint256 private _votingNumber;
 
-    /// @notice Total voting weight for each price suggestion in each round
-    /// @dev votingNumber => price => totalVotes
-    mapping(uint256 => mapping(uint256 => uint256)) private _pendingPriceVotes;
-
-    mapping(uint256 => mapping(address => uint256)) private _balances;
-
-    uint256 internal _winningPrice;
-
-    mapping(uint256 => bool) internal _isEnded;
+    mapping(uint256 => Round) private _rounds;
 
     /**
      * @notice Creates a new voting-enabled exchange
@@ -57,8 +45,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
      */
     modifier votingActive() {
         require(
-            _votingStartedTimeStamp != 0 &&
-                block.timestamp < _votingStartedTimeStamp + TIME_TO_VOTE,
+            _rounds[_votingNumber].startTimestamp != 0 &&
+                block.timestamp <
+                    _rounds[_votingNumber].startTimestamp + TIME_TO_VOTE,
             "No active voting"
         );
         _;
@@ -66,7 +55,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     modifier oneVote() {
         require(
-            _balances[_votingNumber][msg.sender] == 0,
+            _rounds[_votingNumber].votedAmount[msg.sender] == 0,
             "User already voted"
         );
         _;
@@ -75,24 +64,27 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @inheritdoc IVotable
     function startVoting() external override onlyOwner {
         require(
-            _votingStartedTimeStamp == 0 ||
-                block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
-            "Voting already active"
+            _votingNumber == 0 || _rounds[_votingNumber].isEnded,
+            "The previous voting hasn't ended"
         );
+        uint256 newRound = ++_votingNumber;
+        require(_rounds[newRound].startTimestamp == 0, "Voting already active");
 
-        _votingStartedTimeStamp = block.timestamp;
-        unchecked {
-            _votingNumber++;
-        }
-        emit StartVoting(msg.sender, _votingNumber, _votingStartedTimeStamp);
+        _rounds[newRound].startTimestamp = block.timestamp;
+        _rounds[newRound].winningPrice = 0;
+        _rounds[newRound].isEnded = false;
+
+        emit StartVoting(msg.sender, newRound, block.timestamp);
     }
 
     function _updateWinner(uint256 price) internal {
         if (
-            _pendingPriceVotes[_votingNumber][price] >
-            _pendingPriceVotes[_votingNumber][_winningPrice]
+            _rounds[_votingNumber].priceVotes[price] >
+            _rounds[_votingNumber].priceVotes[
+                _rounds[_votingNumber].winningPrice
+            ]
         ) {
-            _winningPrice = price;
+            _rounds[_votingNumber].winningPrice = price;
         }
     }
 
@@ -111,9 +103,12 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         require(price > 0, "Price must be greater than 0");
 
-        _pendingPriceVotes[_votingNumber][price] += tokens;
-        _balances[_votingNumber][msg.sender] = tokens;
-        _TOKEN.transferFrom(msg.sender, address(this), tokens);
+        _rounds[_votingNumber].priceVotes[price] += tokens;
+        _rounds[_votingNumber].votedAmount[msg.sender] = tokens;
+        require(
+            _TOKEN.transferFrom(msg.sender, address(this), tokens),
+            "Transfering reverted"
+        );
         _updateWinner(price);
 
         emit VoteCasted(msg.sender, _votingNumber, price, tokens);
@@ -121,34 +116,32 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     /// @inheritdoc IVotable
     function endVoting() external override {
-        require(_votingStartedTimeStamp != 0, "No voting in progress");
         require(
-            block.timestamp >= _votingStartedTimeStamp + TIME_TO_VOTE,
+            _rounds[_votingNumber].startTimestamp != 0,
+            "No voting in progress"
+        );
+        require(
+            block.timestamp >=
+                _rounds[_votingNumber].startTimestamp + TIME_TO_VOTE,
             "Voting is still in progress"
         );
 
-        uint256 winningPirce = _winningPrice;
+        uint256 winningPirce = _rounds[_votingNumber].winningPrice;
         if (winningPirce > 0) _setPrice(winningPirce);
 
-        _winningPrice = 0;
-        _votingStartedTimeStamp = 0;
-        _isEnded[_votingNumber] = true;
+        _rounds[_votingNumber].isEnded = true;
 
         emit EndVoting(_votingNumber, winningPirce);
     }
 
     function withdrawTokens(uint256 votingNumber_) external {
-        require(_isEnded[votingNumber_], "The voting hasn't ended");
+        require(_rounds[votingNumber_].isEnded, "The voting hasn't ended");
 
-        uint256 balance = _balances[votingNumber_][msg.sender];
+        uint256 balance = _rounds[votingNumber_].votedAmount[msg.sender];
         require(balance > 0, "No tokens to withdraw");
 
-        _balances[votingNumber_][msg.sender] = 0;
+        _rounds[votingNumber_].votedAmount[msg.sender] = 0;
         require(_TOKEN.transfer(msg.sender, balance), "Transfering reverted");
-    }
-
-    function transfer(address to, uint256 value) external {
-        require(_TOKEN.transfer(to, value), "Transfering reverted");
     }
 
     /// @inheritdoc IVotable
@@ -156,7 +149,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 votingNumber_,
         uint256 price_
     ) external view override returns (uint256) {
-        return _pendingPriceVotes[votingNumber_][price_];
+        return _rounds[votingNumber_].priceVotes[price_];
     }
 
     /// @inheritdoc IVotable
@@ -165,7 +158,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /// @inheritdoc IVotable
-    function votingStartedTimeStamp() external view override returns (uint256) {
-        return _votingStartedTimeStamp;
+    function votingStartedTimeStamp(
+        uint256 votingNumber
+    ) external view override returns (uint256) {
+        return _rounds[votingNumber].startTimestamp;
     }
 }

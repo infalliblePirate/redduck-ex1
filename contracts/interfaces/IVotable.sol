@@ -56,6 +56,14 @@ interface IVotable {
      */
     event EndVoting(uint256 indexed votingNumber, uint256 price);
 
+    struct Round {
+        mapping(uint256 => uint256) priceVotes;
+        mapping(address => uint256) votedAmount;
+        uint256 winningPrice;
+        uint256 startTimestamp;
+        bool isEnded;
+    }
+
     /**
      * @notice Start a new voting round
      * @dev Only callable by owner. Cannot start if a voting round is already active
@@ -85,7 +93,9 @@ interface IVotable {
      * @dev Only callable by owner
      * @return startTime Timestamp when voting started (0 if no active voting)
      */
-    function votingStartedTimeStamp() external view returns (uint256);
+    function votingStartedTimeStamp(
+        uint256 votingNumber
+    ) external view returns (uint256);
 
     /**
      * @notice Get the current voting round number
