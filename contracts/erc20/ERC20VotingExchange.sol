@@ -84,25 +84,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _hasVoted[_votingNumber][msg.sender] = true;
     }
 
-    /**
-     * @notice Buy tokens with ETH
-     * @dev Overrides parent function
-     * @return success True if purchase was successful
-     */
-    function buy() external payable override returns (bool) {
-        return _buy(msg.value);
-    }
-
-    /**
-     * @notice Sell tokens for ETH
-     * @dev Overrides parent function
-     * @param value Amount of tokens to sell
-     * @return success True if sale was successful
-     */
-    function sell(uint256 value) external override returns (bool) {
-        return _sell(value);
-    }
-
     /// @inheritdoc IVotable
     function startVoting() external override onlyOwner {
         require(
