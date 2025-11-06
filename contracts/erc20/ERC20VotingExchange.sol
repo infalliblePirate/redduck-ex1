@@ -103,16 +103,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         return _sell(value);
     }
 
-    /**
-     * @notice Transfer tokens to another address
-     * @param to Recipient address
-     * @param value Amount of tokens to transfer
-     * @return success True if transfer was successful
-     */
-    function transfer(address to, uint256 value) external returns (bool) {
-        return _TOKEN.transfer(to, value);
-    }
-
     /// @inheritdoc IVotable
     function startVoting() external override onlyOwner {
         require(
