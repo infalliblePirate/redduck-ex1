@@ -62,7 +62,15 @@ interface IVotable {
         address proposer;
         uint256 proposedAt;
         bool isChallenged;
-        bool finalized;
+    }
+
+    struct Round {
+        mapping(uint256 => uint256) priceVotes;
+        mapping(address => uint256) votedAmount;
+        mapping(address => uint256) stackedEth;
+        VotingResult votingResult;
+        uint256 startTimestamp;
+        bool isEnded;
     }
 
     /**
@@ -137,15 +145,4 @@ interface IVotable {
         uint256 votingNumber_,
         address user
     ) external view returns (uint256);
-
-    /**
-     * @notice Check if a user has voted in a voting round
-     * @param votingNumber_ The voting round number
-     * @param user The user address
-     * @return True if user has voted
-     */
-    function hasVoted(
-        uint256 votingNumber_,
-        address user
-    ) external view returns (bool);
 }
