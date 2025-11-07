@@ -26,10 +26,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     uint256 public constant ETH_TO_SUGGEST_WINNER = 0.5 ether;
 
-    uint8 private constant SLASHING_PERCENTAGE = 50;
-    uint8 private constant SLASHING_DENOMINATOR = 100;
-
-    uint256 public constant FINALIZE_REWARD = 0.01 ether;
+    address private winningChallenger;
 
     /// @notice Counter for voting rounds
     /// @dev Increments with each new voting session
@@ -48,14 +45,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 price_,
         uint8 feeBasisPoints
     ) ERC20Exchange(erc20, price_, feeBasisPoints) {}
-
-    modifier oneVote() {
-        require(
-            _rounds[_votingNumber].votedAmount[msg.sender] == 0,
-            "User already voted"
-        );
-        _;
-    }
 
     /**
      * @notice Ensures a voting round is currently active
@@ -88,7 +77,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     function vote(
         uint256 price,
         uint256 tokensLocked
-    ) external override oneVote votingActive {
+    ) external override votingActive {
         require(price > 0, "Price must be above 0");
         require(
             tokensLocked <= _TOKEN.balanceOf(msg.sender),
@@ -104,7 +93,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         Round storage round = _rounds[_votingNumber];
         round.priceVotes[price] += tokensLocked;
-        round.votedAmount[msg.sender] = tokensLocked;
+        round.priceVotedAmount[msg.sender][price] += tokensLocked;
 
         require(
             _TOKEN.transferFrom(msg.sender, address(this), tokensLocked),
@@ -164,12 +153,9 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
         require(!result.isChallenged, "The price was already challenged");
 
-        uint256 slashedBalance = (round.stackedEth[result.proposer] *
-            SLASHING_PERCENTAGE) / SLASHING_DENOMINATOR;
+        winningChallenger = msg.sender;
 
-        round.stackedEth[result.proposer] -= slashedBalance;
-        round.stackedEth[msg.sender] += slashedBalance;
-
+        round.stackedEth[result.proposer] = 0;
         result.isChallenged = true;
     }
 
@@ -181,28 +167,23 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             block.timestamp >= result.proposedAt + CHALLENGE_PERIOD,
             "Challenge period not ended"
         );
-        require(
-            payable(address(this)).balance >= FINALIZE_REWARD,
-            "Not enough liquidty to reward finalization"
-        );
 
-        if (result.claimedWinningPrice > 0) {
-            _setPrice(result.claimedWinningPrice);
-        }
+        _setPrice(result.claimedWinningPrice);
+        _rounds[_votingNumber].stackedEth[
+            winningChallenger
+        ] = ETH_TO_SUGGEST_WINNER;
 
         emit VotingFinalized(_votingNumber, result.claimedWinningPrice);
         _rounds[_votingNumber].isEnded = true;
-
-        payable(msg.sender).transfer(FINALIZE_REWARD);
     }
 
-    function withdrawTokens(uint256 votingNumber_) external {
+    function withdrawTokens(uint256 votingNumber_, uint256 price) external {
         Round storage round = _rounds[votingNumber_];
-        require(round.isEnded, "The result is not yet finalized");
 
-        uint256 balance = round.votedAmount[msg.sender];
+        uint256 balance = round.priceVotedAmount[msg.sender][price];
         require(balance > 0, "Nothing to withdraw");
-        round.votedAmount[msg.sender] = 0;
+        round.priceVotedAmount[msg.sender][price] = 0;
+        round.priceVotes[price] -= balance; // todo: check it
 
         require(_TOKEN.transfer(msg.sender, balance), "Transfering failed");
     }
@@ -220,7 +201,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /// @inheritdoc IVotable
-    function votingNumber() external view returns (uint256) {
+    function currentVotingNumber() external view returns (uint256) {
         return _votingNumber;
     }
 
@@ -247,9 +228,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     /// @inheritdoc IVotable
     function lockedTokens(
         uint256 votingNumber_,
-        address user
+        address user,
+        uint256 price
     ) external view returns (uint256) {
-        return _rounds[votingNumber_].votedAmount[user];
+        return _rounds[votingNumber_].priceVotedAmount[user][price];
     }
 
     /// @inheritdoc IVotable

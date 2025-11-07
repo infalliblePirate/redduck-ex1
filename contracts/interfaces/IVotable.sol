@@ -66,7 +66,7 @@ interface IVotable {
 
     struct Round {
         mapping(uint256 => uint256) priceVotes;
-        mapping(address => uint256) votedAmount;
+        mapping(address => mapping(uint256 => uint256)) priceVotedAmount;
         mapping(address => uint256) stackedEth;
         VotingResult votingResult;
         uint256 startTimestamp;
@@ -111,7 +111,7 @@ interface IVotable {
      * @notice Get the current voting number
      * @return Current voting round number
      */
-    function votingNumber() external view returns (uint256);
+    function currentVotingNumber() external view returns (uint256);
 
     /**
      * @notice Get votes for a specific price in a voting round
@@ -132,7 +132,8 @@ interface IVotable {
      */
     function lockedTokens(
         uint256 votingNumber_,
-        address user
+        address user,
+        uint256 price
     ) external view returns (uint256);
 
     /**
