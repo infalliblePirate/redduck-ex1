@@ -1,3 +1,4 @@
+import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
 import hre from 'hardhat';
@@ -25,7 +26,7 @@ describe('ERC20Exchange test', () => {
 
   const SEVEN_DAYS = 7 * 24 * 60 * 60;
 
-  const setup = async (): Promise<ERC20ExchangeSetup> => {
+  const deploySetupFixture = async (): Promise<ERC20ExchangeSetup> => {
     const [deployer, user] = await hre.ethers.getSigners();
 
     const token = await new ERC20__factory(deployer).deploy(
@@ -55,7 +56,7 @@ describe('ERC20Exchange test', () => {
 
   describe('Initialize', () => {
     it('should confirm inital state of program', async () => {
-      const { exchange, token } = await setup();
+      const { exchange, token } = await loadFixture(deploySetupFixture);
       expect(await exchange.price()).to.eq(expectedPrice);
       expect(await exchange.feeBasisPoints()).to.eq(expectedFeeBasisPoints);
       expect(await exchange.token()).to.eq(token);
@@ -64,7 +65,7 @@ describe('ERC20Exchange test', () => {
 
   describe('Add liquidity', () => {
     it('should revert', async () => {
-      const { user, exchange } = await setup();
+      const { user, exchange } = await loadFixture(deploySetupFixture);
 
       await expect(
         exchange
@@ -82,7 +83,7 @@ describe('ERC20Exchange test', () => {
     });
 
     it('should update liquidity, balances, emit LiquidityChanged', async () => {
-      const { deployer, exchange } = await setup();
+      const { deployer, exchange } = await loadFixture(deploySetupFixture);
 
       const deployerEthBefore = await hre.ethers.provider.getBalance(deployer);
       const [exchangeLiquidityEthBefore, exchangeLiquidityTokenBefore] =
@@ -118,7 +119,7 @@ describe('ERC20Exchange test', () => {
 
   describe('Buy', () => {
     it("should update liquidity, user's eth and token balance, return true, emit Buy event", async () => {
-      const { user, exchange, token } = await setup();
+      const { user, exchange, token } = await loadFixture(deploySetupFixture);
 
       const userEthBefore = await hre.ethers.provider.getBalance(user);
       const [exchangeEthBefore, exchangeTokenBefore] =
@@ -160,7 +161,7 @@ describe('ERC20Exchange test', () => {
         .withArgs(user, tokensAfterFee, tradeEthAmount, fee);
     });
     it('should revert', async () => {
-      const { user, exchange } = await setup();
+      const { user, exchange } = await loadFixture(deploySetupFixture);
       await expect(
         exchange.connect(user).buy({ value: insufficientEthAmount }),
       ).to.be.revertedWith('No sufficient funds to buy token');
@@ -175,7 +176,7 @@ describe('ERC20Exchange test', () => {
 
   describe('Sell', () => {
     it('should revert', async () => {
-      const { user, exchange } = await setup();
+      const { user, exchange } = await loadFixture(deploySetupFixture);
       await expect(
         exchange.connect(user).sell(expectedSupply),
       ).to.be.revertedWith('The account does not that many tokens');
@@ -186,7 +187,7 @@ describe('ERC20Exchange test', () => {
     });
 
     it('should first buy, then sell the bought amount, update the token, eth balance, emit Sell event', async () => {
-      const { user, exchange, token } = await setup();
+      const { user, exchange, token } = await loadFixture(deploySetupFixture);
 
       const buyTx = await exchange.connect(user).buy({ value: tradeEthAmount });
       const buyReceipt = (await buyTx.wait())!;
@@ -246,7 +247,8 @@ describe('ERC20Exchange test', () => {
 
   describe('Weekly burn fee', () => {
     it('should burn accumulated fee after 7 days and reset fee', async () => {
-      const { deployer, user, exchange } = await setup();
+      const { deployer, user, exchange } =
+        await loadFixture(deploySetupFixture);
 
       await exchange.connect(user).buy({ value: tradeEthAmount });
       const accumulatedFeeBefore = await exchange.accumulatedFee();
@@ -271,7 +273,7 @@ describe('ERC20Exchange test', () => {
       expect(accumulatedFeeAfter).to.eq(0);
     });
     it('should revert', async () => {
-      const { user, exchange } = await setup();
+      const { user, exchange } = await loadFixture(deploySetupFixture);
 
       await exchange.connect(user).buy({ value: tradeEthAmount });
 

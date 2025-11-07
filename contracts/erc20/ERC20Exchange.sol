@@ -225,8 +225,8 @@ contract ERC20Exchange is IExchangable, Ownable {
         lastBurnTimestamp = block.timestamp;
         uint256 fee = _accumulatedFee;
         _accumulatedFee = 0;
-        _TOKEN.burn(address(this), fee);
-        emit WeeklyBurn(msg.sender, _accumulatedFee, block.timestamp);
+        _TOKEN.burn(fee);
+        emit WeeklyBurn(msg.sender, fee, block.timestamp);
         return true;
     }
 }
