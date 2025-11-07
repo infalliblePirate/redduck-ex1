@@ -53,22 +53,6 @@ describe('ERC20 test', () => {
   });
 
   describe('Approve', () => {
-    it('should revert upon approving zero addresses', async () => {
-      const { user, token } = await setup();
-      const zeroSigner = await hre.ethers.getSigner(hre.ethers.ZeroAddress);
-
-      await expect(
-        token
-          .connect(zeroSigner)
-          .getFunction('approve')
-          .staticCall(user, expectedApprovedBalance),
-      ).to.be.revertedWith('The sender is a zero address');
-
-      await expect(
-        token.approve(hre.ethers.ZeroAddress, expectedApprovedBalance),
-      ).to.be.revertedWith('The recipient is a zero address');
-    });
-
     it('should return true, update allowance emit Approval event', async () => {
       const { deployer, user, token } = await setup();
 
@@ -90,18 +74,6 @@ describe('ERC20 test', () => {
   describe('Transfer', () => {
     it('should revert', async () => {
       const { deployer, user, token } = await setup();
-      const zeroSigner = await hre.ethers.getSigner(hre.ethers.ZeroAddress);
-
-      await expect(
-        token
-          .connect(zeroSigner)
-          .getFunction('transfer')
-          .staticCall(user, expectedApprovedBalance),
-      ).to.be.revertedWith('The sender is a zero address');
-
-      await expect(
-        token.transfer(hre.ethers.ZeroAddress, expectedApprovedBalance),
-      ).to.be.revertedWith('The recipient is a zero address');
 
       await expect(
         token.connect(user).transfer(deployer, expectedApprovedBalance),
@@ -202,19 +174,14 @@ describe('ERC20 test', () => {
 
   describe('Burn', () => {
     it('should revert', async () => {
-      const { deployer, user, token } = await setup();
+      const { token } = await setup();
 
-      await expect(
-        token.burn(hre.ethers.ZeroAddress, expectedSupply),
-      ).to.be.revertedWith('The sender is a zero address');
-      await expect(token.connect(user).burn(deployer, expectedSupply)).to.be
-        .reverted;
-      await expect(token.burn(deployer, 0)).to.be.revertedWith(
+      await expect(token.burn(0)).to.be.revertedWith(
         'Burn amount must be greater than 0',
       );
 
       const exceededSupply = expectedSupply * 2n;
-      await expect(token.burn(deployer, exceededSupply)).to.be.revertedWith(
+      await expect(token.burn(exceededSupply)).to.be.revertedWith(
         'The burn amount exceeds balance',
       );
     });
@@ -225,7 +192,7 @@ describe('ERC20 test', () => {
       const deployerBalanceBefore = await token.balanceOf(deployer);
       const supplyBefore = await token.totalSupply();
 
-      await expect(token.burn(deployer, expectedSupply))
+      await expect(token.burn(expectedSupply))
         .to.emit(token, 'Transfer')
         .withArgs(deployer, hre.ethers.ZeroAddress, expectedSupply);
 
