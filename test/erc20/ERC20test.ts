@@ -1,3 +1,4 @@
+import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
 import hre from 'hardhat';
 
@@ -12,7 +13,7 @@ describe('ERC20 test', () => {
   const expectedSupply = hre.ethers.parseUnits('1000', expectedDecimals);
   const expectedApprovedBalance = hre.ethers.parseUnits('1', expectedDecimals);
 
-  const setup = async (): Promise<ERC20Setup> => {
+  const deploySetupFixture = async (): Promise<ERC20Setup> => {
     const [deployer, user] = await hre.ethers.getSigners();
     const erc20 = await new ERC20__factory(deployer).deploy(
       expectedDecimals,
@@ -32,7 +33,7 @@ describe('ERC20 test', () => {
 
   describe('Initialize', () => {
     it('should confirm initial state of program', async () => {
-      const initialState = await setup();
+      const initialState = await loadFixture(deploySetupFixture);
       const token = initialState.token;
 
       const [name, symbol, decimals, totalSupply, deployerBalance] =
@@ -53,24 +54,8 @@ describe('ERC20 test', () => {
   });
 
   describe('Approve', () => {
-    it('should revert upon approving zero addresses', async () => {
-      const { user, token } = await setup();
-      const zeroSigner = await hre.ethers.getSigner(hre.ethers.ZeroAddress);
-
-      await expect(
-        token
-          .connect(zeroSigner)
-          .getFunction('approve')
-          .staticCall(user, expectedApprovedBalance),
-      ).to.be.revertedWith('The sender is a zero address');
-
-      await expect(
-        token.approve(hre.ethers.ZeroAddress, expectedApprovedBalance),
-      ).to.be.revertedWith('The recipient is a zero address');
-    });
-
     it('should return true, update allowance emit Approval event', async () => {
-      const { deployer, user, token } = await setup();
+      const { deployer, user, token } = await loadFixture(deploySetupFixture);
 
       const result = await token
         .getFunction('approve')
@@ -89,19 +74,7 @@ describe('ERC20 test', () => {
 
   describe('Transfer', () => {
     it('should revert', async () => {
-      const { deployer, user, token } = await setup();
-      const zeroSigner = await hre.ethers.getSigner(hre.ethers.ZeroAddress);
-
-      await expect(
-        token
-          .connect(zeroSigner)
-          .getFunction('transfer')
-          .staticCall(user, expectedApprovedBalance),
-      ).to.be.revertedWith('The sender is a zero address');
-
-      await expect(
-        token.transfer(hre.ethers.ZeroAddress, expectedApprovedBalance),
-      ).to.be.revertedWith('The recipient is a zero address');
+      const { deployer, user, token } = await loadFixture(deploySetupFixture);
 
       await expect(
         token.connect(user).transfer(deployer, expectedApprovedBalance),
@@ -109,7 +82,7 @@ describe('ERC20 test', () => {
     });
 
     it("should return true, update user's balances and emit Transfer event", async () => {
-      const { deployer, user, token } = await setup();
+      const { deployer, user, token } = await loadFixture(deploySetupFixture);
 
       expect(
         await token
@@ -131,14 +104,14 @@ describe('ERC20 test', () => {
 
   describe('TransferFrom', () => {
     it('should revert', async () => {
-      const { deployer, user, token } = await setup();
+      const { deployer, user, token } = await loadFixture(deploySetupFixture);
       await expect(
         token.transferFrom(deployer, user, expectedApprovedBalance),
       ).to.be.rejectedWith('The transferable value exceeds allowance');
     });
 
     it("should return true, update user's balances, allowances and emit Transfer, Approval events", async () => {
-      const { deployer, user, token } = await setup();
+      const { deployer, user, token } = await loadFixture(deploySetupFixture);
       await expect(token.approve(user, expectedApprovedBalance))
         .emit(token, 'Approval')
         .withArgs(deployer, user, expectedApprovedBalance);
@@ -170,7 +143,7 @@ describe('ERC20 test', () => {
 
   describe('Mint', () => {
     it('should revert', async () => {
-      const { deployer, user, token } = await setup();
+      const { deployer, user, token } = await loadFixture(deploySetupFixture);
 
       await expect(
         token.mint(hre.ethers.ZeroAddress, expectedSupply),
@@ -183,7 +156,7 @@ describe('ERC20 test', () => {
       );
     });
     it('should mint tokens, update supply, emit Transfer event', async () => {
-      const { user, token } = await setup();
+      const { user, token } = await loadFixture(deploySetupFixture);
 
       const userBalanceBefore = await token.balanceOf(user);
       const supplyBefore = await token.totalSupply();
@@ -202,30 +175,25 @@ describe('ERC20 test', () => {
 
   describe('Burn', () => {
     it('should revert', async () => {
-      const { deployer, user, token } = await setup();
+      const { token } = await loadFixture(deploySetupFixture);
 
-      await expect(
-        token.burn(hre.ethers.ZeroAddress, expectedSupply),
-      ).to.be.revertedWith('The sender is a zero address');
-      await expect(token.connect(user).burn(deployer, expectedSupply)).to.be
-        .reverted;
-      await expect(token.burn(deployer, 0)).to.be.revertedWith(
+      await expect(token.burn(0)).to.be.revertedWith(
         'Burn amount must be greater than 0',
       );
 
       const exceededSupply = expectedSupply * 2n;
-      await expect(token.burn(deployer, exceededSupply)).to.be.revertedWith(
+      await expect(token.burn(exceededSupply)).to.be.revertedWith(
         'The burn amount exceeds balance',
       );
     });
 
     it('should burn tokens, update supply, emit Transfer event', async () => {
-      const { deployer, token } = await setup();
+      const { deployer, token } = await loadFixture(deploySetupFixture);
 
       const deployerBalanceBefore = await token.balanceOf(deployer);
       const supplyBefore = await token.totalSupply();
 
-      await expect(token.burn(deployer, expectedSupply))
+      await expect(token.burn(expectedSupply))
         .to.emit(token, 'Transfer')
         .withArgs(deployer, hre.ethers.ZeroAddress, expectedSupply);
 

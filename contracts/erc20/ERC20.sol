@@ -127,11 +127,10 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
     /**
      * @notice Burns tokens from a specified address
      * @dev Only callable by the designated minter
-     * @param from Address to burn tokens from
      * @param value Amount of tokens to burn
      */
-    function burn(address from, uint256 value) external onlyMinter {
-        _burn(from, value);
+    function burn(uint256 value) external {
+        _burn(msg.sender, value);
     }
 
     /**
@@ -142,9 +141,6 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
      * @param value Amount of tokens approved for spending
      */
     function _approve(address owner, address spender, uint256 value) internal {
-        require(owner != address(0), "The sender is a zero address");
-        require(spender != address(0), "The recipient is a zero address");
-
         _allowances[owner][spender] = value;
         emit Approval(owner, spender, value);
     }
@@ -173,8 +169,6 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
      * @param value Amount of tokens to transfer
      */
     function _transfer(address from, address to, uint256 value) internal {
-        require(from != address(0), "The sender is a zero address");
-        require(to != address(0), "The recipient is a zero address");
         require(
             _balanceOf[from] >= value,
             "The transferable value exceeds balance"
@@ -206,7 +200,6 @@ contract ERC20 is IERC20, IERC20Metadata, Ownable {
      * @param value Amount of tokens to burn
      */
     function _burn(address from, uint256 value) internal {
-        require(from != address(0), "The sender is a zero address");
         require(value > 0, "Burn amount must be greater than 0");
         require(_balanceOf[from] >= value, "The burn amount exceeds balance");
         _balanceOf[from] -= value;

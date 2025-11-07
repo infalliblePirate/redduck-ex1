@@ -20,7 +20,6 @@ contract ERC20Exchange is IExchangable, Ownable {
     uint256 internal _price;
 
     /// @notice Trading fee in basis points (1 bp = 0.01%)
-    /// @dev Max value is FEE_DENOMINATOR - 1 (9999 = 99.99%)
     uint8 internal _feeBasisPoints;
 
     /// @notice Total fees collected but not yet burned
@@ -129,7 +128,10 @@ contract ERC20Exchange is IExchangable, Ownable {
             _TOKEN.balanceOf(address(this)) >= tokensAfterFee + _accumulatedFee,
             "The number of requested tokens exceeds liquidity pool"
         );
-        _TOKEN.transfer(msg.sender, tokensAfterFee);
+        require(
+            _TOKEN.transfer(msg.sender, tokensAfterFee),
+            "Transfering failed"
+        );
 
         emit Buy(msg.sender, tokensAfterFee, value, fee);
         return true;
@@ -160,7 +162,10 @@ contract ERC20Exchange is IExchangable, Ownable {
             ethToSend <= payable(address(this)).balance,
             "The exchange does not have enough eth liquidity"
         );
-        _TOKEN.transferFrom(msg.sender, address(this), value);
+        require(
+            _TOKEN.transferFrom(msg.sender, address(this), value),
+            "Transfering failed"
+        );
         payable(msg.sender).transfer(ethToSend);
 
         emit Sell(msg.sender, soldTokens, ethToSend, fee);
@@ -203,8 +208,11 @@ contract ERC20Exchange is IExchangable, Ownable {
     function resetLiquidity(
         address to
     ) external override onlyOwner returns (bool) {
-        _TOKEN.transfer(to, _TOKEN.balanceOf(address(this)));
-        payable(msg.sender).transfer(payable(address(this)).balance);
+        require(
+            _TOKEN.transfer(to, _TOKEN.balanceOf(address(this))),
+            "Transfering failed"
+        );
+        payable(to).transfer(payable(address(this)).balance);
         return true;
     }
 
@@ -215,9 +223,10 @@ contract ERC20Exchange is IExchangable, Ownable {
             "Burn not available yet"
         );
         lastBurnTimestamp = block.timestamp;
-        _TOKEN.burn(address(this), _accumulatedFee);
-        emit WeeklyBurn(msg.sender, _accumulatedFee, block.timestamp);
+        uint256 fee = _accumulatedFee;
         _accumulatedFee = 0;
+        _TOKEN.burn(fee);
+        emit WeeklyBurn(msg.sender, fee, block.timestamp);
         return true;
     }
 }
