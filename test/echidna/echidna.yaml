@@ -1,0 +1,8 @@
+testLimit: 10000
+seqLen: 100
+deployer: "0x40000"
+balanceContract: 2000000000000000000000
+cryticArgs: ['--solc-remaps', '@=node_modules/@']
+sender: ["0x10000", "0x20000", "0x30000"]
+
+corpusDir: corpus

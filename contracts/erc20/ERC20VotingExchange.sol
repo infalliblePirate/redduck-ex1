@@ -160,21 +160,21 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     function finalizeVoting() external override {
-        VotingResult storage result = _rounds[_votingNumber].votingResult;
+        Round storage round = _rounds[_votingNumber];
+        VotingResult storage result = round.votingResult;
+
         require(result.proposedAt != 0, "No result proposed");
-        require(!_rounds[_votingNumber].isEnded, "Already finalized");
+        require(!round.isEnded, "Already finalized");
         require(
             block.timestamp >= result.proposedAt + CHALLENGE_PERIOD,
             "Challenge period not ended"
         );
 
         _setPrice(result.claimedWinningPrice);
-        _rounds[_votingNumber].stackedEth[
-            winningChallenger
-        ] = ETH_TO_SUGGEST_WINNER;
+        round.stackedEth[winningChallenger] = ETH_TO_SUGGEST_WINNER;
 
+        round.isEnded = true;
         emit VotingFinalized(_votingNumber, result.claimedWinningPrice);
-        _rounds[_votingNumber].isEnded = true;
     }
 
     function withdrawTokens(uint256 votingNumber_, uint256 price) external {

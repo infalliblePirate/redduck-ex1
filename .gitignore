@@ -10,4 +10,6 @@ cache
 coverage
 coverage.json
 
+corpus
+
 ignition/deployments/*
