@@ -53,14 +53,6 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _;
     }
 
-    modifier oneVote() {
-        require(
-            _rounds[_votingNumber].votedAmount[msg.sender] == 0,
-            "User already voted"
-        );
-        _;
-    }
-
     /// @inheritdoc IVotable
     function startVoting() external override onlyOwner {
         require(
@@ -68,31 +60,22 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "The previous voting hasn't ended"
         );
         uint256 newRound = ++_votingNumber;
-        require(_rounds[newRound].startTimestamp == 0, "Voting already active");
 
         _rounds[newRound].startTimestamp = block.timestamp;
-        _rounds[newRound].winningPrice = 0;
-        _rounds[newRound].isEnded = false;
+        _rounds[newRound].priceList = new SortedPriceList();
 
         emit StartVoting(msg.sender, newRound, block.timestamp);
     }
 
-    function _updateWinner(uint256 price) internal {
-        if (
-            _rounds[_votingNumber].priceVotes[price] >
-            _rounds[_votingNumber].priceVotes[
-                _rounds[_votingNumber].winningPrice
-            ]
-        ) {
-            _rounds[_votingNumber].winningPrice = price;
-        }
+    function _updateWinner(uint256 price, uint256 votes) internal {
+        _rounds[_votingNumber].priceList.upsert(price, votes);
     }
 
     /// @inheritdoc IVotable
     function vote(
         uint256 price,
         uint256 tokens
-    ) external override votingActive oneVote {
+    ) external override votingActive {
         uint256 requiredSupplyToVote = (_TOKEN.totalSupply() *
             VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
 
@@ -103,21 +86,23 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         require(price > 0, "Price must be greater than 0");
 
-        _rounds[_votingNumber].priceVotes[price] += tokens;
-        _rounds[_votingNumber].votedAmount[msg.sender] = tokens;
+        _rounds[_votingNumber].votedAmount[msg.sender][price] += tokens;
+        _updateWinner(
+            price,
+            _rounds[_votingNumber].priceList.getVotes(price) + tokens
+        );
+
         require(
             _TOKEN.transferFrom(msg.sender, address(this), tokens),
             "Transfering reverted"
         );
-        _updateWinner(price);
 
         emit VoteCasted(msg.sender, _votingNumber, price, tokens);
     }
 
     /// @inheritdoc IVotable
     function endVoting() external override {
-        uint256 currentRound = _votingNumber;
-        Round storage round = _rounds[currentRound];
+        Round storage round = _rounds[_votingNumber];
 
         require(round.startTimestamp != 0, "No active voting");
         require(!round.isEnded, "Voting already ended");
@@ -127,20 +112,27 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
 
         round.isEnded = true;
-        uint256 winningPirce = round.winningPrice;
+        uint256 winningPirce = round.priceList.getTopPrice();
         if (winningPirce > 0) _setPrice(winningPirce);
 
         emit EndVoting(_votingNumber, winningPirce);
     }
 
-    function withdrawTokens(uint256 votingNumber_) external {
-        require(_rounds[votingNumber_].isEnded, "The voting hasn't ended");
+    function withdrawTokens(uint256 votingNumber_, uint256 price) external {
+        uint256 lockedTokens = _rounds[votingNumber_].votedAmount[msg.sender][
+            price
+        ];
+        require(lockedTokens > 0, "No tokens to withdraw");
 
-        uint256 balance = _rounds[votingNumber_].votedAmount[msg.sender];
-        require(balance > 0, "No tokens to withdraw");
-
-        _rounds[votingNumber_].votedAmount[msg.sender] = 0;
-        require(_TOKEN.transfer(msg.sender, balance), "Transfering reverted");
+        _rounds[votingNumber_].votedAmount[msg.sender][price] = 0;
+        _updateWinner(
+            price,
+            _rounds[votingNumber_].priceList.getVotes(price) - lockedTokens
+        );
+        require(
+            _TOKEN.transfer(msg.sender, lockedTokens),
+            "Transfering reverted"
+        );
     }
 
     /// @inheritdoc IVotable
@@ -148,7 +140,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 votingNumber_,
         uint256 price_
     ) external view override returns (uint256) {
-        return _rounds[votingNumber_].priceVotes[price_];
+        return _rounds[votingNumber_].priceList.getVotes(price_);
     }
 
     /// @inheritdoc IVotable

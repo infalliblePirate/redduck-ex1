@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "../erc20/SortedPriceList.sol";
+
 /**
  * @title IVotable
  * @notice Interface for a voting mechanism to determine token prices
@@ -57,8 +59,8 @@ interface IVotable {
     event EndVoting(uint256 indexed votingNumber, uint256 price);
 
     struct Round {
-        mapping(uint256 => uint256) priceVotes;
-        mapping(address => uint256) votedAmount;
+        SortedPriceList priceList;
+        mapping(address => mapping(uint256 => uint256)) votedAmount;
         uint256 winningPrice;
         uint256 startTimestamp;
         bool isEnded;
