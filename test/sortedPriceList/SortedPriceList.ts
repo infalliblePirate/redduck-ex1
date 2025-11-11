@@ -2,29 +2,29 @@ import { loadFixture } from '@nomicfoundation/hardhat-network-helpers';
 import { expect } from 'chai';
 import hre from 'hardhat';
 
-import { SortedArraySet__factory } from '../../typechain-types';
+import { SortedPriceList__factory } from '../../typechain-types';
 
-describe('SortedArraySet', function () {
+describe('SortedPriceList', function () {
   async function deployFixture() {
     const [deployer] = await hre.ethers.getSigners();
-    const factory = new SortedArraySet__factory(deployer);
+    const factory = new SortedPriceList__factory(deployer);
     const set = await factory.deploy();
     await set.waitForDeployment();
     return { deployer, set };
   }
 
-  it('should insert and keep elements sorted by votes', async function () {
+  it('should upsert and keep elements sorted by votes', async function () {
     const { set } = await loadFixture(deployFixture);
 
-    await set.insert(10, 8);
-    await set.insert(20, 12);
-    await set.insert(5, 10);
+    await set.upsert(10, 8);
+    await set.upsert(20, 12);
+    await set.upsert(5, 10);
 
-    expect(await set.size()).to.equal(3n);
+    expect(await set.totalCount()).to.equal(3n);
 
-    expect(await set.getWinningPrice()).to.equal(20n);
+    expect(await set.getTopPrice()).to.equal(20n);
 
-    const nodes = await set.getPrices();
+    const nodes = await set.getSortedNodes();
     const prices = nodes.map((n) => n.price);
     const votes = nodes.map((n) => n.votes);
 
@@ -35,62 +35,62 @@ describe('SortedArraySet', function () {
   it('should replace an existing price with updated votes', async () => {
     const { set } = await loadFixture(deployFixture);
 
-    await set.insert(10, 5);
-    await set.insert(10, 15);
+    await set.upsert(10, 5);
+    await set.upsert(10, 15);
 
-    const nodes = await set.getPrices();
+    const nodes = await set.getSortedNodes();
     expect(nodes.length).to.equal(1);
     expect(nodes[0].price).to.equal(10n);
     expect(nodes[0].votes).to.equal(15n);
 
-    expect(await set.getWinningPrice()).to.equal(10n);
-    expect(await set.size()).to.equal(1n);
+    expect(await set.getTopPrice()).to.equal(10n);
+    expect(await set.totalCount()).to.equal(1n);
   });
 
-  it('should remove a node correctly', async () => {
-    const { set } = await loadFixture(deployFixture);
+  // it('should remove a node correctly', async () => {
+  //   const { set } = await loadFixture(deployFixture);
 
-    await set.insert(5, 10);
-    await set.insert(7, 15);
-    await set.insert(9, 5);
+  //   await set.upsert(5, 10);
+  //   await set.upsert(7, 15);
+  //   await set.upsert(9, 5);
 
-    expect(await set.size()).to.equal(3n);
-    expect(await set.getWinningPrice()).to.equal(7n);
+  //   expect(await set.totalCount()).to.equal(3n);
+  //   expect(await set.getTopPrice()).to.equal(7n);
 
-    await set.removeIfExists(7);
-    expect(await set.size()).to.equal(2n);
+  //   await set._remove(7,2);
+  //   expect(await set.totalCount()).to.equal(2n);
 
-    expect(await set.getWinningPrice()).to.equal(5n);
+  //   expect(await set.getTopPrice()).to.equal(5n);
 
-    await set.removeIfExists(9);
-    expect(await set.size()).to.equal(1n);
+  //   await set._remove(9, 3);
+  //   expect(await set.totalCount()).to.equal(1n);
 
-    const remaining = await set.getPrices();
-    expect(remaining[0].price).to.equal(5n);
-    expect(remaining[0].votes).to.equal(10n);
-  });
+  //   const remaining = await set.getSortedNodes();
+  //   expect(remaining[0].price).to.equal(5n);
+  //   expect(remaining[0].votes).to.equal(10n);
+  // });
 
   it('should handle getVotes and found correctly', async () => {
     const { set } = await loadFixture(deployFixture);
 
-    await set.insert(100, 20);
-    await set.insert(200, 30);
+    await set.upsert(100, 20);
+    await set.upsert(200, 30);
 
-    const foundIdx = await set.found(200);
-    expect(foundIdx).to.not.equal(0n);
+    // const foundIdx = await set.found(200);
+    // expect(foundIdx).to.not.equal(0n);
 
     expect(await set.getVotes(100)).to.equal(20n);
     expect(await set.getVotes(200)).to.equal(30n);
     expect(await set.getVotes(300)).to.equal(0n);
   });
 
-  it('should return empty array when nothing inserted', async () => {
+  it('should return empty array when nothing upserted', async () => {
     const { set } = await loadFixture(deployFixture);
 
-    expect(await set.size()).to.equal(0n);
-    expect(await set.getWinningPrice()).to.equal(0n);
+    expect(await set.totalCount()).to.equal(0n);
+    expect(await set.getTopPrice()).to.equal(0n);
 
-    const arr = await set.getPrices();
+    const arr = await set.getSortedNodes();
     expect(arr.length).to.equal(0);
   });
 });

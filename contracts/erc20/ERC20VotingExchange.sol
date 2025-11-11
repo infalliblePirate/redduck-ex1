@@ -125,14 +125,17 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         require(lockedTokens > 0, "No tokens to withdraw");
 
         _rounds[votingNumber_].votedAmount[msg.sender][price] = 0;
-        _updateWinner(
-            price,
-            _rounds[votingNumber_].priceList.getVotes(price) - lockedTokens
-        );
         require(
             _TOKEN.transfer(msg.sender, lockedTokens),
             "Transfering reverted"
         );
+
+        if (!_rounds[votingNumber_].isEnded) {
+            _updateWinner(
+                price,
+                _rounds[votingNumber_].priceList.getVotes(price) - lockedTokens
+            );
+        }
     }
 
     /// @inheritdoc IVotable
