@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-// todo: ask about storage layout, do we take it into accout packing
 contract SortedPriceList {
     struct PriceNode {
         uint256 price;
@@ -21,16 +20,20 @@ contract SortedPriceList {
     }
 
     /**
-     * @notice Updates the existing price or inserts new
+     * @notice Updates existing price or inserts a new one.
      * @param price The price user votes for
-     * @param votes The total amount of votes of the price
+     * @param votes The total votes for that price
      */
     function upsert(uint256 price, uint256 votes) external {
         uint256 index = indexOf[price];
         if (index != 0 && nodes[index].exists) {
-            _remove(price, index);
+            update(price, votes);
+        } else {
+            insert(price, votes);
         }
+    }
 
+    function insert(uint256 price, uint256 votes) internal {
         uint256 newIndex = _createNode(price, votes);
 
         if (headIndex == 0) {
@@ -80,11 +83,23 @@ contract SortedPriceList {
         }
     }
 
+    function update(uint256 price, uint256 newVotes) internal {
+        uint256 index = indexOf[price];
+        if (index == 0 || !nodes[index].exists) revert("Node does not exist");
+
+        uint256 oldVotes = nodes[index].votes;
+
+        if (oldVotes == newVotes) return;
+
+        _remove(price, index);
+        insert(price, newVotes);
+    }
+
     function _createNode(
         uint256 price,
         uint256 votes
     ) internal returns (uint256) {
-        uint256 newIndex = uint256(nodes.length);
+        uint256 newIndex = nodes.length;
         nodes.push(PriceNode(price, votes, 0, true));
         indexOf[price] = newIndex;
         return newIndex;
@@ -97,6 +112,11 @@ contract SortedPriceList {
                 current = nodes[current].nextIndex;
             }
             headIndex = current;
+        } else {
+            uint256 prev = _findPrevious(index);
+            if (prev != 0) {
+                nodes[prev].nextIndex = nodes[index].nextIndex;
+            }
         }
 
         nodes[index].exists = false;
@@ -106,27 +126,40 @@ contract SortedPriceList {
         }
     }
 
+    function _findPrevious(uint256 index) internal view returns (uint256) {
+        uint256 current = headIndex;
+        while (current != 0) {
+            if (nodes[current].nextIndex == index) {
+                return current;
+            }
+            current = nodes[current].nextIndex;
+        }
+        return 0;
+    }
+
     function getTopPrice() public view returns (uint256) {
         return nodes[headIndex].price;
     }
 
     function getVotes(uint256 price) public view returns (uint256) {
         uint256 index = indexOf[price];
-        if (!nodes[index].exists) return 0;
+        if (index == 0 || !nodes[index].exists) return 0;
         return nodes[index].votes;
     }
 
     /**
      * @notice Returns all nodes in sorted order
-     * @notice Use only in tests
+     * @dev For testing only
      */
     function getSortedNodes() public view returns (PriceNode[] memory) {
         PriceNode[] memory sortedNodes = new PriceNode[](totalCount);
 
         uint256 current = headIndex;
-        for (uint256 i = 0; i < totalCount; i++) {
-            if (!nodes[current].exists) continue;
-            sortedNodes[i] = nodes[current];
+        uint256 i;
+        while (current != 0) {
+            if (nodes[current].exists) {
+                sortedNodes[i++] = nodes[current];
+            }
             current = nodes[current].nextIndex;
         }
 
