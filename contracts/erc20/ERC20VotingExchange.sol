@@ -28,6 +28,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     address private winningChallenger;
 
+    uint256 private reward;
+
     /// @notice Counter for voting rounds
     /// @dev Increments with each new voting session
     uint256 private _votingNumber;
@@ -123,7 +125,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "Previous proposing result pending"
         );
 
-        round.stackedEth[msg.sender] += msg.value;
+        round.stakedEth[msg.sender] += msg.value;
 
         result.claimedWinningPrice = winningPrice;
         result.proposer = msg.sender;
@@ -155,7 +157,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
         winningChallenger = msg.sender;
 
-        round.stackedEth[result.proposer] = 0;
+        round.stakedEth[result.proposer] = 0;
+        reward += ETH_TO_SUGGEST_WINNER;
         result.isChallenged = true;
     }
 
@@ -171,9 +174,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
 
         _setPrice(result.claimedWinningPrice);
-        round.stackedEth[winningChallenger] = ETH_TO_SUGGEST_WINNER;
+        round.stakedEth[winningChallenger] = reward;
 
         round.isEnded = true;
+        reward = 0;
         emit VotingFinalized(_votingNumber, result.claimedWinningPrice);
     }
 
@@ -183,7 +187,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 balance = round.priceVotedAmount[msg.sender][price];
         require(balance > 0, "Nothing to withdraw");
         round.priceVotedAmount[msg.sender][price] = 0;
-        round.priceVotes[price] -= balance; // todo: check it
+        round.priceVotes[price] -= balance;
 
         require(_TOKEN.transfer(msg.sender, balance), "Transfering failed");
     }
@@ -192,10 +196,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         Round storage round = _rounds[votingNumber_];
         require(round.isEnded, "The voting isn't finalized");
 
-        uint256 balance = round.stackedEth[msg.sender];
+        uint256 balance = round.stakedEth[msg.sender];
         require(balance > 0, "Nothing to withdraw");
 
-        round.stackedEth[msg.sender] = 0;
+        round.stakedEth[msg.sender] = 0;
 
         payable(msg.sender).transfer(balance);
     }
@@ -235,10 +239,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     }
 
     /// @inheritdoc IVotable
-    function stackedEth(
+    function stakedEth(
         uint256 votingNumber_,
         address user
     ) external view returns (uint256) {
-        return _rounds[votingNumber_].stackedEth[user];
+        return _rounds[votingNumber_].stakedEth[user];
     }
 }

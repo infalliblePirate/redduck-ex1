@@ -67,7 +67,7 @@ interface IVotable {
     struct Round {
         mapping(uint256 => uint256) priceVotes;
         mapping(address => mapping(uint256 => uint256)) priceVotedAmount;
-        mapping(address => uint256) stackedEth;
+        mapping(address => uint256) stakedEth;
         VotingResult votingResult;
         uint256 startTimestamp;
         bool isEnded;
@@ -142,7 +142,7 @@ interface IVotable {
      * @param user The user address
      * @return Amount of stacked ETH
      */
-    function stackedEth(
+    function stakedEth(
         uint256 votingNumber_,
         address user
     ) external view returns (uint256);
