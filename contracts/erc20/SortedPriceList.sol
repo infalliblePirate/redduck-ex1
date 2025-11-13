@@ -1,198 +1,145 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title SortedPriceList
-/// @author Kateryna Pavlenko
-/// @notice Maintains a singly linked list of prices sorted by votes in descending order
+/// @title SortedPriceList with off-chain sorting
+/// @notice Maintains a doubly linked list of prices sorted by votes
+/// @dev Requires off-chain computation to find correct insertion position
 contract SortedPriceList {
-    /// @notice Represents a node in the sorted linked list
-    /// @param price The price value
-    /// @param votes The total votes associated with this price
-    /// @param nextIndex The index of the next node in the linked list
-    /// @param exists Whether the node is currently active
     struct PriceNode {
         uint256 price;
         uint256 votes;
-        uint256 nextIndex;
-        bool exists;
+        uint256 next;
+        uint256 prev;
     }
 
-    /// @notice Index of the head
-    uint256 public headIndex;
-
-    /// @dev Internal storage of all nodes; node index starts at 1 (0 is reserved)
+    uint256 private head;
     PriceNode[] private nodes;
+    mapping(uint256 => uint256) private priceToIndex;
 
-    /// @notice Number of active nodes in the list
-    /// @dev Used in tests to verify the number of existing entries
-    uint256 public totalCount;
+    event NodeUpserted(uint256 indexed price, uint256 votes, uint256 index);
+    event NodeRemoved(uint256 indexed price, uint256 index);
 
-    /// @dev Maps price -> node index in the nodes array
-    mapping(uint256 => uint256) private indexOf;
+    error InvalidPosition();
+    error InvalidPrevNode();
+    error NodeNotFound();
 
-    /// @notice Initializes the contract and reserves the first node index (0)
     constructor() {
-        nodes.push(PriceNode(0, 0, 0, false));
+        // null value node
+        nodes.push(PriceNode(0, 0, 0, 0));
     }
 
-    /**
-     * @notice Updates an existing price or inserts a new one while maintaining sorted order
-     * @param price The price value to insert or update
-     * @param votes The total number of votes for the price
-     */
-    function upsert(uint256 price, uint256 votes) external {
-        uint256 index = indexOf[price];
-        if (index != 0 && nodes[index].exists) {
-            update(price, votes);
-        } else {
-            insert(price, votes);
-        }
-    }
-
-    /**
-     * @notice Inserts a new price into the sorted linked list
-     * @param price The price value to insert
-     * @param votes The total votes for the price
-     */
-    function insert(uint256 price, uint256 votes) internal {
-        uint256 newIndex = _createNode(price, votes);
-
-        if (headIndex == 0) {
-            headIndex = newIndex;
-            unchecked {
-                ++totalCount;
-            }
-            return;
-        }
-
-        if (nodes[headIndex].votes < votes) {
-            nodes[newIndex].nextIndex = headIndex;
-            headIndex = newIndex;
-            unchecked {
-                ++totalCount;
-            }
-            return;
-        }
-
-        uint256 current = headIndex;
-        while (true) {
-            uint256 next = nodes[current].nextIndex;
-
-            if (next == 0) {
-                nodes[current].nextIndex = newIndex;
-                unchecked {
-                    ++totalCount;
-                }
-                return;
-            }
-
-            if (!nodes[next].exists) {
-                current = next;
-                continue;
-            }
-
-            if (nodes[next].votes < votes) {
-                nodes[current].nextIndex = newIndex;
-                nodes[newIndex].nextIndex = next;
-                unchecked {
-                    ++totalCount;
-                }
-                return;
-            }
-
-            current = next;
-        }
-    }
-
-    /**
-     * @notice Updates the vote count of an existing price
-     * @dev Removes and reinserts the node to maintain correct sort order
-     * @param price The price whose votes are updated
-     * @param newVotes The new vote count for the price
-     */
-    function update(uint256 price, uint256 newVotes) internal {
-        uint256 index = indexOf[price];
-        if (index == 0 || !nodes[index].exists) revert("Node does not exist");
-
-        uint256 oldVotes = nodes[index].votes;
-        if (oldVotes == newVotes) return;
-
-        _remove(price, index);
-        insert(price, newVotes);
-    }
-
-    /**
-     * @notice Creates and stores a new node in the list
-     * @param price The price value
-     * @param votes The total votes for the price
-     * @return newIndex The index of the newly created node
-     */
-    function _createNode(
+    /// @notice Inserts or updates a price node using off-chain computed position
+    /// @param price The price to insert or update
+    /// @param votes Total votes for this price
+    /// @param insertAfter Index of the node after which to insert (0 to insert at head)
+    /// @dev Caller must compute correct insertAfter off-chain to maintain sort order
+    function upsert(
         uint256 price,
-        uint256 votes
-    ) internal returns (uint256 newIndex) {
-        newIndex = nodes.length;
-        nodes.push(PriceNode(price, votes, 0, true));
-        indexOf[price] = newIndex;
-    }
+        uint256 votes,
+        uint256 insertAfter
+    ) external {
+        uint256 idx = priceToIndex[price];
 
-    /**
-     * @notice Removes a node from the list
-     * @param price The price value corresponding to the node
-     * @param index The index of the node to remove
-     */
-    function _remove(uint256 price, uint256 index) internal {
-        nodes[index].exists = false;
-        delete indexOf[price];
-        unchecked {
-            --totalCount;
+        if (votes == 0) {
+            _remove(price);
+            return;
         }
 
-        if (headIndex == index) {
-            uint256 current = nodes[index].nextIndex;
-            while (current != 0 && !nodes[current].exists) {
-                current = nodes[current].nextIndex;
+        // update existing
+        if (idx != 0) {
+            _unlinkNode(idx);
+            nodes[idx].votes = votes;
+            _linkNode(idx, insertAfter);
+            emit NodeUpserted(price, votes, idx);
+            return;
+        }
+
+        // insert new
+        idx = nodes.length;
+        nodes.push(PriceNode(price, votes, 0, 0));
+        priceToIndex[price] = idx;
+        _linkNode(idx, insertAfter);
+
+        emit NodeUpserted(price, votes, idx);
+    }
+
+    function _unlinkNode(uint256 idx) internal {
+        uint256 prevNode = nodes[idx].prev;
+        uint256 nextNode = nodes[idx].next;
+
+        if (prevNode == 0) {
+            head = nextNode;
+        } else {
+            nodes[prevNode].next = nextNode;
+        }
+
+        if (nextNode != 0) {
+            nodes[nextNode].prev = prevNode;
+        }
+
+        nodes[idx].prev = 0;
+        nodes[idx].next = 0;
+    }
+
+    /// @notice Inserts a node at the specified position
+    /// @param idx The index of the node to insert
+    /// @param insertAfter Index of the node after which to insert (0 for head)
+    function _linkNode(uint256 idx, uint256 insertAfter) internal {
+        uint256 nextIdx = nodes[idx].next;
+        bool violatesOrder = (insertAfter != 0 &&
+            nodes[insertAfter].votes < nodes[idx].votes) ||
+            (nextIdx != 0 && nodes[idx].votes < nodes[nextIdx].votes);
+
+        if (violatesOrder) revert InvalidPosition();
+
+        // insert at head
+        if (insertAfter == 0) {
+            uint256 oldHead = head;
+
+            nodes[idx].prev = 0;
+            nodes[idx].next = oldHead;
+
+            if (oldHead != 0) {
+                nodes[oldHead].prev = idx;
             }
-            headIndex = current;
+
+            head = idx;
+            return;
+        }
+
+        // insert after an existing node
+        uint256 nextAfterPrev = nodes[insertAfter].next;
+
+        nodes[idx].prev = insertAfter;
+        nodes[idx].next = nextAfterPrev;
+        nodes[insertAfter].next = idx;
+
+        if (nextAfterPrev != 0) {
+            nodes[nextAfterPrev].prev = idx;
         }
     }
 
-    /**
-     * @notice Returns the price with the highest number of votes
-     * @return The top (most voted) price
-     */
+    /// @notice Removes a price node completely from the list
+    /// @param price The price to remove
+    function _remove(uint256 price) internal {
+        uint256 idx = priceToIndex[price];
+        if (idx == 0) revert NodeNotFound();
+
+        _unlinkNode(idx);
+        nodes[idx].price = 0;
+        nodes[idx].votes = 0;
+
+        delete priceToIndex[price];
+
+        emit NodeRemoved(price, idx);
+    }
+
+    /// @notice Returns the price with the highest number of votes
     function getTopPrice() public view returns (uint256) {
-        return nodes[headIndex].price;
+        return nodes[head].price;
     }
 
-    /**
-     * @notice Retrieves the vote count for a given price
-     * @param price The price to look up
-     * @return The total votes for the price, or 0 if the price does not exist
-     */
     function getVotes(uint256 price) public view returns (uint256) {
-        uint256 index = indexOf[price];
-        if (index == 0 || !nodes[index].exists) return 0;
-        return nodes[index].votes;
-    }
-
-    /**
-     * @notice Returns all nodes in descending vote order
-     * @dev Used primarily for testing or off-chain inspection
-     * @return An array of all active PriceNodes in sorted order
-     */
-    function getSortedNodes() public view returns (PriceNode[] memory) {
-        PriceNode[] memory sortedNodes = new PriceNode[](totalCount);
-
-        uint256 current = headIndex;
-        uint256 i;
-        while (current != 0) {
-            if (nodes[current].exists) {
-                sortedNodes[i++] = nodes[current];
-            }
-            current = nodes[current].nextIndex;
-        }
-
-        return sortedNodes;
+        nodes[priceToIndex[price]].votes;
     }
 }

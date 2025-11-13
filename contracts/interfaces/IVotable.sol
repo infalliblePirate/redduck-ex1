@@ -79,8 +79,16 @@ interface IVotable {
      * @dev Price must have been previously suggested in current round
      * @dev Locks caller's tokens until voting ends
      * @param price Price to vote for
+     * @param tokens Tokens that user locks for price
+     * @param insertAfter off chain computed index
      */
-    function vote(uint256 price, uint256 tokens) external;
+    function vote(uint256 price, uint256 tokens, uint256 insertAfter) external;
+
+    function withdrawTokens(
+        uint256 votingNumber_,
+        uint256 price,
+        uint256 insertAfter
+    ) external;
 
     /**
      * @notice End the current voting round and apply the winning price
