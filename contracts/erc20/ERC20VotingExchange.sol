@@ -62,19 +62,33 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 newRound = ++_votingNumber;
 
         _rounds[newRound].startTimestamp = block.timestamp;
-        _rounds[newRound].priceList = new SortedPriceList();
 
         emit StartVoting(msg.sender, newRound, block.timestamp);
     }
 
-    function _updateWinner(uint256 price, uint256 votes) internal {
-        _rounds[_votingNumber].priceList.upsert(price, votes);
+    /// @notice Updates the price list using separate insert/update/remove functions
+    function _updateWinner(
+        uint256 price,
+        uint256 votes,
+        uint256 insertAfter
+    ) internal {
+        SortedPriceList list = _rounds[_votingNumber].priceList;
+        uint256 currentVotes = list.getVotes(price);
+
+        if (votes == 0 && currentVotes != 0) {
+            list.remove(price);
+        } else if (currentVotes == 0) {
+            list.insert(price, votes, insertAfter);
+        } else {
+            list.update(price, votes, insertAfter);
+        }
     }
 
     /// @inheritdoc IVotable
     function vote(
         uint256 price,
-        uint256 tokens
+        uint256 tokens,
+        uint256 insertAfter
     ) external override votingActive {
         uint256 requiredSupplyToVote = (_TOKEN.totalSupply() *
             VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
@@ -89,7 +103,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _rounds[_votingNumber].votedAmount[msg.sender][price] += tokens;
         _updateWinner(
             price,
-            _rounds[_votingNumber].priceList.getVotes(price) + tokens
+            _rounds[_votingNumber].priceList.getVotes(price) + tokens,
+            insertAfter
         );
 
         require(
@@ -112,13 +127,17 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         );
 
         round.isEnded = true;
-        uint256 winningPirce = round.priceList.getTopPrice();
-        if (winningPirce > 0) _setPrice(winningPirce);
+        uint256 winningPrice = round.priceList.getTopPrice();
+        _setPrice(winningPrice);
 
-        emit EndVoting(_votingNumber, winningPirce);
+        emit EndVoting(_votingNumber, winningPrice);
     }
 
-    function withdrawTokens(uint256 votingNumber_, uint256 price) external {
+    function withdrawTokens(
+        uint256 votingNumber_,
+        uint256 price,
+        uint256 insertAfter
+    ) external {
         uint256 lockedTokens = _rounds[votingNumber_].votedAmount[msg.sender][
             price
         ];
@@ -130,11 +149,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
             "Transfering reverted"
         );
 
-        if (!_rounds[votingNumber_].isEnded) {
-            _updateWinner(
-                price,
-                _rounds[votingNumber_].priceList.getVotes(price) - lockedTokens
-            );
+        Round storage round = _rounds[votingNumber_];
+        if (!round.isEnded) {
+            uint256 newVotes = round.priceList.getVotes(price) - lockedTokens;
+            _updateWinner(price, newVotes, insertAfter);
         }
     }
 
