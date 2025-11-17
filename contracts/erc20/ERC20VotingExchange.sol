@@ -70,7 +70,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     function _updateWinner(
         uint256 price,
         uint256 votes,
-        uint256 insertAfter
+        uint256 insertAfter,
+        uint256 insertBefore
     ) internal {
         SortedPriceList list = _rounds[_votingNumber].priceList;
         uint256 currentVotes = list.getVotes(price);
@@ -78,17 +79,20 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         if (votes == 0 && currentVotes != 0) {
             list.remove(price);
         } else if (currentVotes == 0) {
-            list.insert(price, votes, insertAfter);
+            list.insert(price, votes, insertAfter, insertBefore);
         } else {
-            list.update(price, votes, insertAfter);
+            list.update(price, votes, insertAfter, insertBefore);
         }
+
+        emit VoteValueChanged(_votingNumber, price, votes);
     }
 
     /// @inheritdoc IVotable
     function vote(
         uint256 price,
         uint256 tokens,
-        uint256 insertAfter
+        uint256 insertAfter,
+        uint256 insertBefore
     ) external override votingActive {
         uint256 requiredSupplyToVote = (_TOKEN.totalSupply() *
             VOTE_THRESHOLD_BPS) / BPS_DENOMINATOR;
@@ -104,7 +108,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         _updateWinner(
             price,
             _rounds[_votingNumber].priceList.getVotes(price) + tokens,
-            insertAfter
+            insertAfter,
+            insertBefore
         );
 
         require(
@@ -136,7 +141,8 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
     function withdrawTokens(
         uint256 votingNumber_,
         uint256 price,
-        uint256 insertAfter
+        uint256 insertAfter,
+        uint256 insertBefore
     ) external {
         uint256 lockedTokens = _rounds[votingNumber_].votedAmount[msg.sender][
             price
@@ -152,8 +158,10 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         Round storage round = _rounds[votingNumber_];
         if (!round.isEnded) {
             uint256 newVotes = round.priceList.getVotes(price) - lockedTokens;
-            _updateWinner(price, newVotes, insertAfter);
+            _updateWinner(price, newVotes, insertAfter, insertBefore);
         }
+
+        emit Withdraw(address(this), votingNumber_, price, lockedTokens);
     }
 
     /// @inheritdoc IVotable

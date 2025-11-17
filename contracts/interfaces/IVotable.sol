@@ -58,6 +58,19 @@ interface IVotable {
      */
     event EndVoting(uint256 indexed votingNumber, uint256 price);
 
+    event Withdraw(
+        address indexed voter,
+        uint256 indexed votingNumber,
+        uint256 price,
+        uint256 balance
+    );
+
+    event VoteValueChanged(
+        uint256 indexed votingNumber,
+        uint256 price,
+        uint256 newVoteValue
+    );
+
     struct Round {
         SortedPriceList priceList;
         mapping(address => mapping(uint256 => uint256)) votedAmount;
@@ -82,12 +95,18 @@ interface IVotable {
      * @param tokens Tokens that user locks for price
      * @param insertAfter off chain computed index
      */
-    function vote(uint256 price, uint256 tokens, uint256 insertAfter) external;
+    function vote(
+        uint256 price,
+        uint256 tokens,
+        uint256 insertAfter,
+        uint256 insertBefore
+    ) external;
 
     function withdrawTokens(
         uint256 votingNumber_,
         uint256 price,
-        uint256 insertAfter
+        uint256 insertAfter,
+        uint256 insertBefore
     ) external;
 
     /**

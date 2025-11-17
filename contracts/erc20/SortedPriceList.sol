@@ -33,14 +33,15 @@ contract SortedPriceList {
     function insert(
         uint256 price,
         uint256 votes,
-        uint256 insertAfter
+        uint256 insertAfter,
+        uint256 insertBefore
     ) external {
         if (priceToIndex[price] != 0) revert NodeAlreadyExists();
 
         uint256 idx = nodes.length;
         nodes.push(PriceNode(price, votes, 0, 0));
         priceToIndex[price] = idx;
-        _linkNode(idx, insertAfter);
+        _linkNode(idx, insertAfter, insertBefore);
 
         emit NodeInserted(price, votes, idx);
     }
@@ -49,14 +50,15 @@ contract SortedPriceList {
     function update(
         uint256 price,
         uint256 votes,
-        uint256 insertAfter
+        uint256 insertAfter,
+        uint256 insertBefore
     ) external {
         uint256 idx = priceToIndex[price];
         if (idx == 0) revert NodeNotFound();
 
         _unlinkNode(idx);
         nodes[idx].votes = votes;
-        _linkNode(idx, insertAfter);
+        _linkNode(idx, insertAfter, insertBefore);
 
         emit NodeUpdated(price, votes, idx);
     }
@@ -100,30 +102,37 @@ contract SortedPriceList {
     }
 
     /// @notice Link a node after another node
-    function _linkNode(uint256 idx, uint256 insertAfter) internal {
-        uint256 nextIdx = nodes[idx].next;
+    function _linkNode(
+        uint256 idx,
+        uint256 insertAfter,
+        uint256 insertBefore
+    ) internal {
+        uint256 prev = insertAfter;
+        uint256 next = insertBefore;
 
-        bool violatesOrder = (insertAfter != 0 &&
-            nodes[insertAfter].votes < nodes[idx].votes) ||
-            (nextIdx != 0 && nodes[idx].votes < nodes[nextIdx].votes);
+        if (prev == 0) {
+            if (next != head) revert InvalidPosition();
 
-        if (violatesOrder) revert InvalidPosition();
+            if (next != 0 && nodes[idx].votes < nodes[next].votes)
+                revert InvalidPosition();
 
-        if (insertAfter == 0) {
-            uint256 oldHead = head;
-            nodes[idx].prev = 0;
-            nodes[idx].next = oldHead;
+            nodes[idx].next = next;
 
-            if (oldHead != 0) nodes[oldHead].prev = idx;
+            if (next != 0) nodes[next].prev = idx;
             head = idx;
             return;
         }
 
-        uint256 nextAfterPrev = nodes[insertAfter].next;
-        nodes[idx].prev = insertAfter;
-        nodes[idx].next = nextAfterPrev;
-        nodes[insertAfter].next = idx;
+        if (nodes[prev].next != next) revert InvalidPosition();
 
-        if (nextAfterPrev != 0) nodes[nextAfterPrev].prev = idx;
+        if (nodes[prev].votes < nodes[idx].votes) revert InvalidPosition();
+        if (next != 0 && nodes[idx].votes < nodes[next].votes)
+            revert InvalidPosition();
+
+        nodes[idx].prev = prev;
+        nodes[idx].next = next;
+        nodes[prev].next = idx;
+
+        if (next != 0) nodes[next].prev = idx;
     }
 }
