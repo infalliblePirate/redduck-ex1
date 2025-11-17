@@ -1,138 +1,177 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-/// @title SortedPriceList with off-chain sorting
-/// @notice Maintains a doubly linked list of prices sorted by votes
-/// @dev Requires off-chain computation to find correct insertion position
 contract SortedPriceList {
     struct PriceNode {
         uint256 price;
         uint256 votes;
-        uint256 next;
         uint256 prev;
+        uint256 next;
     }
 
-    uint256 private head;
-    PriceNode[] private nodes;
-    mapping(uint256 => uint256) private priceToIndex;
+    mapping(uint256 => PriceNode) public nodes;
 
-    event NodeInserted(uint256 indexed price, uint256 votes, uint256 index);
-    event NodeUpdated(uint256 indexed price, uint256 votes, uint256 index);
-    event NodeRemoved(uint256 indexed price, uint256 index);
+    uint256 public head;
+    uint256 public tail;
+    uint256 public size;
 
-    error InvalidPosition();
+    error NodeExists();
     error NodeNotFound();
-    error NodeAlreadyExists();
+    error InvalidPosition();
 
-    constructor() {
-        // null value node
-        nodes.push(PriceNode(0, 0, 0, 0));
+    function contains(uint256 price) public view returns (bool) {
+        return nodes[price].votes != 0;
     }
 
-    /// @notice Insert a new price node
+    function isEmpty() public view returns (bool) {
+        return size == 0;
+    }
+
     function insert(
         uint256 price,
         uint256 votes,
-        uint256 insertAfter,
-        uint256 insertBefore
+        uint256 prevHint,
+        uint256 nextHint
     ) external {
-        if (priceToIndex[price] != 0) revert NodeAlreadyExists();
+        if (contains(price)) revert NodeExists();
+        require(votes > 0);
 
-        uint256 idx = nodes.length;
-        nodes.push(PriceNode(price, votes, 0, 0));
-        priceToIndex[price] = idx;
-        _linkNode(idx, insertAfter, insertBefore);
+        (prevHint, nextHint) = findInsertPosition(votes, prevHint, nextHint);
 
-        emit NodeInserted(price, votes, idx);
+        _link(price, votes, prevHint, nextHint);
+        size++;
     }
 
-    /// @notice Update an existing node's votes and reposition it
     function update(
         uint256 price,
         uint256 votes,
-        uint256 insertAfter,
-        uint256 insertBefore
+        uint256 prevHint,
+        uint256 nextHint
     ) external {
-        uint256 idx = priceToIndex[price];
-        if (idx == 0) revert NodeNotFound();
+        if (!contains(price)) revert NodeNotFound();
 
-        _unlinkNode(idx);
-        nodes[idx].votes = votes;
-        _linkNode(idx, insertAfter, insertBefore);
-
-        emit NodeUpdated(price, votes, idx);
+        _unlink(price);
+        (prevHint, nextHint) = findInsertPosition(votes, prevHint, nextHint);
+        _link(price, votes, prevHint, nextHint);
     }
 
-    /// @notice Remove a node
-    function remove(uint256 price) external {
-        uint256 idx = priceToIndex[price];
-        if (idx == 0) revert NodeNotFound();
-
-        _unlinkNode(idx);
-        nodes[idx].price = 0;
-        nodes[idx].votes = 0;
-        delete priceToIndex[price];
-
-        emit NodeRemoved(price, idx);
+    function remove(uint256 price) public {
+        if (!contains(price)) revert NodeNotFound();
+        _unlink(price);
+        delete nodes[price];
+        size--;
     }
 
-    /// @notice Returns the price with the highest votes
-    function getTopPrice() public view returns (uint256) {
-        return nodes[head].price;
-    }
+    function findInsertPosition(
+        uint256 votes,
+        uint256 prevHint,
+        uint256 nextHint
+    ) public view returns (uint256 prevPrice, uint256 nextPrice) {
+        bool prevValid = (prevHint == 0) || contains(prevHint);
+        bool nextValid = (nextHint == 0) || contains(nextHint);
 
-    /// @notice Returns the votes of a price
-    function getVotes(uint256 price) public view returns (uint256) {
-        uint256 idx = priceToIndex[price];
-        return nodes[idx].votes;
-    }
-
-    /// @notice Unlink a node from the list
-    function _unlinkNode(uint256 idx) internal {
-        uint256 prevNode = nodes[idx].prev;
-        uint256 nextNode = nodes[idx].next;
-
-        if (prevNode == 0) head = nextNode;
-        else nodes[prevNode].next = nextNode;
-
-        if (nextNode != 0) nodes[nextNode].prev = prevNode;
-
-        nodes[idx].prev = 0;
-        nodes[idx].next = 0;
-    }
-
-    /// @notice Link a node after another node
-    function _linkNode(
-        uint256 idx,
-        uint256 insertAfter,
-        uint256 insertBefore
-    ) internal {
-        uint256 prev = insertAfter;
-        uint256 next = insertBefore;
-
-        if (prev == 0) {
-            if (next != head) revert InvalidPosition();
-
-            if (next != 0 && nodes[idx].votes < nodes[next].votes)
-                revert InvalidPosition();
-
-            nodes[idx].next = next;
-
-            if (next != 0) nodes[next].prev = idx;
-            head = idx;
-            return;
+        if (!prevValid && !nextValid) {
+            return _findFromHead(votes);
         }
 
-        if (nodes[prev].next != next) revert InvalidPosition();
+        if (prevValid && !nextValid) {
+            return _descendList(votes, prevHint);
+        }
 
-        if (nodes[prev].votes < nodes[idx].votes) revert InvalidPosition();
-        if (next != 0 && nodes[idx].votes < nodes[next].votes)
-            revert InvalidPosition();
+        if (!prevValid && nextValid) {
+            return _ascendList(votes, nextHint);
+        }
 
-        nodes[idx].prev = prev;
-        nodes[idx].next = next;
-        nodes[prev].next = idx;
+        if (_validInsertBetween(prevHint, nextHint, votes)) {
+            return (prevHint, nextHint);
+        }
 
-        if (next != 0) nodes[next].prev = idx;
+        if (nodes[prevHint].votes >= votes) {
+            return _descendList(votes, prevHint);
+        }
+
+        if (nodes[nextHint].votes <= votes) {
+            return _ascendList(votes, nextHint);
+        }
+
+        return _findFromHead(votes); // fallback
+    }
+
+    function _descendList(
+        uint256 votes,
+        uint256 start
+    ) internal view returns (uint256 prev, uint256 next) {
+        prev = start;
+        next = nodes[start].next;
+
+        while (next != 0 && nodes[next].votes > votes) {
+            prev = next;
+            next = nodes[next].next;
+        }
+    }
+
+    function _ascendList(
+        uint256 votes,
+        uint256 start
+    ) internal view returns (uint256 prev, uint256 next) {
+        next = start;
+        prev = nodes[start].prev;
+
+        while (prev != 0 && nodes[prev].votes < votes) {
+            next = prev;
+            prev = nodes[prev].prev;
+        }
+    }
+
+    function _findFromHead(
+        uint256 votes
+    ) internal view returns (uint256 prev, uint256 next) {
+        next = head;
+        prev = 0;
+        while (next != 0 && nodes[next].votes > votes) {
+            prev = next;
+            next = nodes[next].next;
+        }
+    }
+
+    function _validInsertBetween(
+        uint256 prevPrice,
+        uint256 nextPrice,
+        uint256 votes
+    ) internal view returns (bool) {
+        if (prevPrice == 0)
+            return head == nextPrice && votes >= nodes[nextPrice].votes;
+        if (nextPrice == 0)
+            return tail == prevPrice && votes <= nodes[prevPrice].votes;
+
+        return
+            nodes[prevPrice].next == nextPrice &&
+            nodes[prevPrice].votes >= votes &&
+            nodes[nextPrice].votes <= votes;
+    }
+
+    function _link(
+        uint256 price,
+        uint256 votes,
+        uint256 prevPrice,
+        uint256 nextPrice
+    ) internal {
+        nodes[price] = PriceNode(price, votes, prevPrice, nextPrice);
+
+        if (prevPrice == 0) head = price;
+        else nodes[prevPrice].next = price;
+
+        if (nextPrice == 0) tail = price;
+        else nodes[nextPrice].prev = price;
+    }
+
+    function _unlink(uint256 price) internal {
+        PriceNode storage n = nodes[price];
+
+        if (n.prev == 0) head = n.next;
+        else nodes[n.prev].next = n.next;
+
+        if (n.next == 0) tail = n.prev;
+        else nodes[n.next].prev = n.prev;
     }
 }
