@@ -27,6 +27,14 @@ contract SortedPriceList {
         return size == 0;
     }
 
+    function getVotes(uint256 price) public view returns (uint256) {
+        return nodes[price].votes;
+    }
+
+    function getTopPrice() public view returns (uint256) {
+        return head;
+    }
+
     function insert(
         uint256 price,
         uint256 votes,
