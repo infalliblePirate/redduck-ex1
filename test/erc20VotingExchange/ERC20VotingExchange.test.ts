@@ -97,7 +97,9 @@ describe('ERC20VotingExchange test', () => {
       const balance = await token.balanceOf(deployer);
 
       await token.approve(votingExchange, balance);
-      await votingExchange.connect(deployer).vote(newSuggestedPrice, balance);
+      await votingExchange
+        .connect(deployer)
+        .vote(newSuggestedPrice, balance, 0, 0);
 
       await expect(
         votingExchange.connect(deployer).buy({ value: tradeEthAmount }),
@@ -113,7 +115,7 @@ describe('ERC20VotingExchange test', () => {
       await token.connect(voter1).approve(votingExchange, tokensToVote);
       await votingExchange
         .connect(voter1)
-        .vote(newSuggestedPrice, tokensToVote);
+        .vote(newSuggestedPrice, tokensToVote, 0, 0);
 
       const userTokens = await token.balanceOf(voter1);
       await token.connect(voter1).approve(votingExchange, userTokens);
@@ -157,7 +159,9 @@ describe('ERC20VotingExchange test', () => {
         await loadFixture(deploySetupFixture);
 
       await expect(
-        votingExchange.connect(deployer).vote(newSuggestedPrice, tokensToVote),
+        votingExchange
+          .connect(deployer)
+          .vote(newSuggestedPrice, tokensToVote, 0, 0),
       ).to.be.revertedWith('No active voting');
     });
 
@@ -168,7 +172,9 @@ describe('ERC20VotingExchange test', () => {
 
       await token.connect(voter1).approve(votingExchange, tokensToVote);
       await expect(
-        votingExchange.connect(voter1).vote(newSuggestedPrice, tokensToVote),
+        votingExchange
+          .connect(voter1)
+          .vote(newSuggestedPrice, tokensToVote, 0, 0),
       ).to.be.revertedWith('Not enough tokens on balance');
     });
 
@@ -186,7 +192,7 @@ describe('ERC20VotingExchange test', () => {
       await token.connect(deployer).approve(votingExchange, deployerBalance);
       await votingExchange
         .connect(deployer)
-        .vote(newSuggestedPrice, deployerBalance);
+        .vote(newSuggestedPrice, deployerBalance, 0, 0);
 
       const before = await votingExchange.pendingPriceVotes(
         votingNumber,
@@ -197,7 +203,7 @@ describe('ERC20VotingExchange test', () => {
       await token.connect(voter1).approve(votingExchange, voterBalance);
       const tx = await votingExchange
         .connect(voter1)
-        .vote(newSuggestedPrice, voterBalance);
+        .vote(newSuggestedPrice, voterBalance, 0, 0);
       await expect(tx)
         .to.emit(votingExchange, 'VoteCasted')
         .withArgs(voter1, votingNumber, newSuggestedPrice, voterBalance);
@@ -209,18 +215,23 @@ describe('ERC20VotingExchange test', () => {
       expect(after - before).to.equal(voterBalance);
     });
 
-    it('should revert if user votes twice', async () => {
+    it('should allow user to vote multiple times for same price', async () => {
       const { votingExchange, deployer, token } =
         await loadFixture(deploySetupFixture);
-      await buyTokens(votingExchange, deployer, ethToVote);
+      await buyTokens(votingExchange, deployer, 2n * ethToVote);
       await votingExchange.startVoting();
 
       const balance = await token.balanceOf(deployer);
+      const halfBalance = balance / 2n;
+
       await token.connect(deployer).approve(votingExchange, balance);
-      await votingExchange.connect(deployer).vote(newSuggestedPrice, balance);
-      await expect(
-        votingExchange.connect(deployer).vote(newSuggestedPrice, balance),
-      ).to.be.revertedWith('User already voted');
+      await votingExchange
+        .connect(deployer)
+        .vote(newSuggestedPrice, halfBalance, 0, 0);
+
+      await votingExchange
+        .connect(deployer)
+        .vote(newSuggestedPrice, halfBalance, 0, 0);
     });
 
     it('should revert if voting time expired', async () => {
@@ -232,7 +243,7 @@ describe('ERC20VotingExchange test', () => {
       await time.increase(TIME_TO_VOTE + 1n);
       const balance = await token.balanceOf(deployer);
       await expect(
-        votingExchange.connect(deployer).vote(newSuggestedPrice, balance),
+        votingExchange.connect(deployer).vote(newSuggestedPrice, balance, 0, 0),
       ).to.be.revertedWith('No active voting');
     });
 
@@ -241,7 +252,7 @@ describe('ERC20VotingExchange test', () => {
         await loadFixture(deploySetupFixture);
       await votingExchange.startVoting();
       await expect(
-        votingExchange.connect(deployer).vote(newSuggestedPrice, 0n),
+        votingExchange.connect(deployer).vote(newSuggestedPrice, 0n, 0, 0),
       ).to.be.revertedWith('Not enough tokens to vote');
     });
   });
@@ -264,7 +275,7 @@ describe('ERC20VotingExchange test', () => {
       await token.approve(votingExchange, tokensToVote);
       await votingExchange
         .connect(deployer)
-        .vote(newSuggestedPrice, tokensToVote);
+        .vote(newSuggestedPrice, tokensToVote, 0, 0);
 
       await time.increase(TIME_TO_VOTE + 1n);
       await votingExchange.endVoting();
@@ -304,7 +315,7 @@ describe('ERC20VotingExchange test', () => {
       await token.approve(votingExchange, tokensToVote);
       await votingExchange
         .connect(deployer)
-        .vote(newSuggestedPrice, tokensToVote);
+        .vote(newSuggestedPrice, tokensToVote, 0, 0);
 
       await time.increase(TIME_TO_VOTE + 1n);
 
@@ -315,7 +326,7 @@ describe('ERC20VotingExchange test', () => {
   });
 
   describe('Withdraw tokens', () => {
-    it("should revert if voting hasn't ended", async () => {
+    it('should allow user to withdraw during active voting', async () => {
       const { votingExchange, deployer, token } =
         await loadFixture(deploySetupFixture);
 
@@ -325,11 +336,15 @@ describe('ERC20VotingExchange test', () => {
       await token.approve(votingExchange, tokensToVote);
       await votingExchange
         .connect(deployer)
-        .vote(newSuggestedPrice, tokensToVote);
+        .vote(newSuggestedPrice, tokensToVote, 0, 0);
 
-      await expect(votingExchange.withdrawTokens(1)).to.be.revertedWith(
-        "The voting hasn't ended",
-      );
+      const balanceBefore = await token.balanceOf(deployer);
+      await expect(votingExchange.withdrawTokens(1, newSuggestedPrice, 0, 0))
+        .to.emit(token, 'Transfer')
+        .withArgs(votingExchange.target, deployer, tokensToVote);
+
+      const balanceAfter = await token.balanceOf(deployer);
+      expect(balanceAfter - balanceBefore).to.equal(tokensToVote);
     });
 
     it('should revert if user has no tokens to withdraw', async () => {
@@ -340,7 +355,9 @@ describe('ERC20VotingExchange test', () => {
       await votingExchange.endVoting();
 
       await expect(
-        votingExchange.connect(voter1).withdrawTokens(1),
+        votingExchange
+          .connect(voter1)
+          .withdrawTokens(1, newSuggestedPrice, 0, 0),
       ).to.be.revertedWith('No tokens to withdraw');
     });
 
@@ -354,13 +371,13 @@ describe('ERC20VotingExchange test', () => {
       await token.approve(votingExchange, tokensToVote);
       await votingExchange
         .connect(deployer)
-        .vote(newSuggestedPrice, tokensToVote);
+        .vote(newSuggestedPrice, tokensToVote, 0, 0);
 
       await time.increase(TIME_TO_VOTE + 1n);
       await votingExchange.endVoting();
 
       const balanceBefore = await token.balanceOf(deployer);
-      await expect(votingExchange.withdrawTokens(1))
+      await expect(votingExchange.withdrawTokens(1, newSuggestedPrice, 0, 0))
         .to.emit(token, 'Transfer')
         .withArgs(votingExchange.target, deployer, tokensToVote);
 
@@ -378,16 +395,303 @@ describe('ERC20VotingExchange test', () => {
       await token.approve(votingExchange, tokensToVote);
       await votingExchange
         .connect(deployer)
-        .vote(newSuggestedPrice, tokensToVote);
+        .vote(newSuggestedPrice, tokensToVote, 0, 0);
 
       await time.increase(TIME_TO_VOTE + 1n);
       await votingExchange.endVoting();
 
-      await votingExchange.withdrawTokens(1);
+      await votingExchange.withdrawTokens(1, newSuggestedPrice, 0, 0);
 
-      await expect(votingExchange.withdrawTokens(1)).to.be.revertedWith(
-        'No tokens to withdraw',
+      await expect(
+        votingExchange.withdrawTokens(1, newSuggestedPrice, 0, 0),
+      ).to.be.revertedWith('No tokens to withdraw');
+    });
+  });
+
+  describe('Stress tests with outdated hints', () => {
+    it('should handle ascending traversal when hints require walking up the list', async () => {
+      const { votingExchange, token } = await loadFixture(deploySetupFixture);
+
+      const signers = await hre.ethers.getSigners();
+      const users = signers.slice(0, 12);
+
+      const lowVoteUsers = users.slice(0, 6);
+      for (const user of lowVoteUsers) {
+        const m = BigInt(Math.floor(Math.random() * 3) + 2);
+        await buyTokens(votingExchange, user, ethToVote * m);
+        await token
+          .connect(user)
+          .approve(votingExchange, hre.ethers.MaxUint256);
+      }
+
+      const highVoteUsers = users.slice(6);
+      for (const user of highVoteUsers) {
+        const m = BigInt(Math.floor(Math.random() * 5) + 6);
+        await buyTokens(votingExchange, user, ethToVote * m);
+        await token
+          .connect(user)
+          .approve(votingExchange, hre.ethers.MaxUint256);
+      }
+
+      await votingExchange.startVoting();
+      for (const user of lowVoteUsers) {
+        const price = BigInt(Math.floor(Math.random() * 50) + 1);
+        const balance = await token.balanceOf(user);
+        const [prev, next] = await votingExchange.findInsertPosition(
+          balance,
+          0,
+          0,
+        );
+        await votingExchange.connect(user).vote(price, balance, prev, next);
+      }
+
+      let tailPrice = await votingExchange.getCurrentTopPrice();
+      while (tailPrice !== 0n) {
+        const [, next] = await votingExchange.getNode(tailPrice);
+        if (next === 0n) break;
+        tailPrice = next;
+      }
+
+      for (const user of highVoteUsers) {
+        const price = BigInt(Math.floor(Math.random() * 50) + 51);
+
+        const currentBalance = await token.balanceOf(user);
+
+        const [prev, next] = await votingExchange.findInsertPosition(
+          currentBalance,
+          0,
+          tailPrice,
+        );
+
+        await expect(
+          votingExchange.connect(user).vote(price, currentBalance, prev, next),
+        ).to.not.be.reverted;
+
+        tailPrice = await votingExchange.getCurrentTopPrice();
+        while (tailPrice !== 0n) {
+          const [, next] = await votingExchange.getNode(tailPrice);
+          if (next === 0n) break;
+          tailPrice = next;
+        }
+      }
+
+      const prices: bigint[] = [];
+      let current = await votingExchange.getCurrentTopPrice();
+
+      while (current !== 0n) {
+        prices.push(current);
+        const [, next] = await votingExchange.getNode(current);
+        current = next;
+      }
+
+      for (let i = 1; i < prices.length; i++) {
+        const votesPrev = await votingExchange.pendingPriceVotes(
+          1,
+          prices[i - 1],
+        );
+        const votesCurr = await votingExchange.pendingPriceVotes(1, prices[i]);
+        expect(votesPrev).to.be.gte(
+          votesCurr,
+          'List is not sorted in descending order',
+        );
+      }
+
+      const topPrice = await votingExchange.getCurrentTopPrice();
+      const topVotes = await votingExchange.pendingPriceVotes(1, topPrice);
+
+      for (const price of prices) {
+        const votes = await votingExchange.pendingPriceVotes(1, price);
+        expect(topVotes).to.be.gte(votes, 'Top price should have most votes');
+      }
+
+      expect(new Set(prices).size).to.equal(
+        prices.length,
+        'Duplicate nodes detected',
       );
+
+      for (let i = 0; i < prices.length - 1; i++) {
+        const [, next] = await votingExchange.getNode(prices[i]);
+        expect(next).to.equal(prices[i + 1], 'Broken next pointer in list');
+      }
+    });
+
+    it('should handle descending traversal when hints require walking down the list', async () => {
+      const { votingExchange, token } = await loadFixture(deploySetupFixture);
+
+      const signers = await hre.ethers.getSigners();
+      const users = signers.slice(0, 12);
+
+      const highVoteUsers = users.slice(0, 6);
+      for (const user of highVoteUsers) {
+        const m = BigInt(Math.floor(Math.random() * 5) + 6);
+        await buyTokens(votingExchange, user, ethToVote * m);
+        await token
+          .connect(user)
+          .approve(votingExchange, hre.ethers.MaxUint256);
+      }
+
+      const lowVoteUsers = users.slice(6);
+      for (const user of lowVoteUsers) {
+        const m = BigInt(Math.floor(Math.random() * 3) + 2);
+        await buyTokens(votingExchange, user, ethToVote * m);
+        await token
+          .connect(user)
+          .approve(votingExchange, hre.ethers.MaxUint256);
+      }
+
+      await votingExchange.startVoting();
+
+      for (const user of highVoteUsers) {
+        const price = BigInt(Math.floor(Math.random() * 50) + 51);
+        const balance = await token.balanceOf(user);
+        const [prev, next] = await votingExchange.findInsertPosition(
+          balance,
+          0,
+          0,
+        );
+        await votingExchange.connect(user).vote(price, balance, prev, next);
+      }
+
+      const headPrice = await votingExchange.getCurrentTopPrice();
+
+      for (const user of lowVoteUsers) {
+        const price = BigInt(Math.floor(Math.random() * 50) + 1);
+
+        const currentBalance = await token.balanceOf(user);
+
+        const [prev, next] = await votingExchange.findInsertPosition(
+          currentBalance,
+          headPrice,
+          0,
+        );
+
+        await expect(
+          votingExchange.connect(user).vote(price, currentBalance, prev, next),
+        ).to.not.be.reverted;
+      }
+
+      const prices: bigint[] = [];
+      let current = await votingExchange.getCurrentTopPrice();
+
+      while (current !== 0n) {
+        prices.push(current);
+        const [, next] = await votingExchange.getNode(current);
+        current = next;
+      }
+
+      for (let i = 1; i < prices.length; i++) {
+        const votesPrev = await votingExchange.pendingPriceVotes(
+          1,
+          prices[i - 1],
+        );
+        const votesCurr = await votingExchange.pendingPriceVotes(1, prices[i]);
+        expect(votesPrev).to.be.gte(
+          votesCurr,
+          'List is not sorted in descending order',
+        );
+      }
+
+      const topPrice = await votingExchange.getCurrentTopPrice();
+      const topVotes = await votingExchange.pendingPriceVotes(1, topPrice);
+
+      for (const price of prices) {
+        const votes = await votingExchange.pendingPriceVotes(1, price);
+        expect(topVotes).to.be.gte(votes, 'Top price should have most votes');
+      }
+
+      expect(new Set(prices).size).to.equal(
+        prices.length,
+        'Duplicate nodes detected',
+      );
+
+      for (let i = 0; i < prices.length - 1; i++) {
+        const [, next] = await votingExchange.getNode(prices[i]);
+        expect(next).to.equal(prices[i + 1], 'Broken next pointer in list');
+      }
+    });
+
+    it('stress tests outdated hints with 20 concurrent users', async function () {
+      const { votingExchange, token } = await loadFixture(deploySetupFixture);
+
+      const signers = await hre.ethers.getSigners();
+      const users = signers.slice(0, 20);
+
+      for (const user of users) {
+        const m = BigInt(Math.floor(Math.random() * 8) + 2);
+        await buyTokens(votingExchange, user, ethToVote * m);
+        await token
+          .connect(user)
+          .approve(votingExchange, hre.ethers.MaxUint256);
+      }
+
+      await votingExchange.startVoting();
+
+      const hints = [];
+      for (const user of users) {
+        const price = BigInt(Math.floor(Math.random() * 100) + 1);
+
+        const [prev, next] = await votingExchange
+          .connect(user)
+          .findInsertPosition(await token.balanceOf(user), 0, 0);
+
+        hints.push({ user, price, prev, next });
+      }
+
+      hints.sort(() => Math.random() - 0.5);
+
+      for (const { user, price, prev, next } of hints) {
+        await votingExchange
+          .connect(user)
+          .vote(price, await token.balanceOf(user), prev, next);
+      }
+
+      const prices: bigint[] = [];
+      let current = await votingExchange.getCurrentTopPrice();
+
+      while (current !== 0n) {
+        prices.push(current);
+        const [, next] = await votingExchange.getNode(current);
+        current = next;
+      }
+
+      // const pricesWithVotes = await Promise.all(
+      //   prices.map(async (p) => {
+      //     const votes = await votingExchange.pendingPriceVotes(1, p);
+      //     return `${p.toString()} -> ${votes.toString()}`;
+      //   })
+      // );
+
+      // console.log(pricesWithVotes.join(", "));
+
+      for (let i = 1; i < prices.length; i++) {
+        const votesPrev = await votingExchange.pendingPriceVotes(
+          1,
+          prices[i - 1],
+        );
+        const votesCurr = await votingExchange.pendingPriceVotes(1, prices[i]);
+        expect(votesPrev).to.be.gte(votesCurr, 'List is not sorted correctly');
+      }
+
+      if (prices.length > 0) {
+        const headVotes = await votingExchange.pendingPriceVotes(1, prices[0]);
+        for (let i = 1; i < prices.length; i++) {
+          const votes = await votingExchange.pendingPriceVotes(1, prices[i]);
+          expect(headVotes).to.be.gte(
+            votes,
+            'Head does not have the most votes',
+          );
+        }
+      }
+
+      expect(new Set(prices).size).to.equal(
+        prices.length,
+        'Duplicate nodes detected',
+      );
+
+      for (let i = 0; i < prices.length - 1; i++) {
+        const [, next] = await votingExchange.getNode(prices[i]);
+        expect(next).to.equal(prices[i + 1], 'Broken next pointer in list');
+      }
     });
   });
 });
