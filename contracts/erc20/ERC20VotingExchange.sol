@@ -27,6 +27,13 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
 
     mapping(uint256 => Round) private _rounds;
 
+    struct PriceNode {
+        uint256 price;
+        uint256 votes;
+        uint256 prev;
+        uint256 next;
+    }
+
     /**
      * @notice Creates a new voting-enabled exchange
      * @param erc20 Address of the erc20 contract
@@ -62,6 +69,7 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 newRound = ++_votingNumber;
 
         _rounds[newRound].startTimestamp = block.timestamp;
+        _rounds[newRound].priceList = new SortedPriceList();
 
         emit StartVoting(msg.sender, newRound, block.timestamp);
     }
@@ -182,5 +190,24 @@ contract ERC20VotingExchange is IVotable, ERC20Exchange {
         uint256 votingNumber
     ) external view override returns (uint256) {
         return _rounds[votingNumber].startTimestamp;
+    }
+
+    function findInsertPosition(
+        uint256 votes,
+        uint256 prevHint,
+        uint256 nextHint
+    ) external view returns (uint256, uint256) {
+        (uint256 prevPrice, uint256 nextPrice) = _rounds[_votingNumber]
+            .priceList
+            .findInsertPosition(votes, prevHint, nextHint);
+        return (prevPrice, nextPrice);
+    }
+
+    function getCurrentTopPrice() public view returns (uint256) {
+        return _rounds[_votingNumber].priceList.getTopPrice();
+    }
+
+    function getNode(uint256 price) public view returns (uint256, uint256) {
+        return _rounds[_votingNumber].priceList.getNode(price);
     }
 }
