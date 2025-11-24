@@ -83,10 +83,16 @@ contract SortedPriceList {
         }
 
         if (prevValid && !nextValid) {
+            if (prevHint == 0) {
+                return _findFromHead(votes);
+            }
             return _descendList(votes, prevHint);
         }
 
         if (!prevValid && nextValid) {
+            if (nextHint == 0) {
+                return _findFromHead(votes);
+            }
             return _ascendList(votes, nextHint);
         }
 
@@ -94,15 +100,15 @@ contract SortedPriceList {
             return (prevHint, nextHint);
         }
 
-        if (nodes[prevHint].votes >= votes) {
+        if (prevHint != 0 && nodes[prevHint].votes >= votes) {
             return _descendList(votes, prevHint);
         }
 
-        if (nodes[nextHint].votes <= votes) {
+        if (nextHint != 0 && nodes[nextHint].votes <= votes) {
             return _ascendList(votes, nextHint);
         }
 
-        return _findFromHead(votes); // fallback
+        return _findFromHead(votes);
     }
 
     function _descendList(
@@ -112,7 +118,7 @@ contract SortedPriceList {
         prev = start;
         next = nodes[start].next;
 
-        while (next != 0 && nodes[next].votes > votes) {
+        while (next != 0 && nodes[next].votes >= votes) {
             prev = next;
             next = nodes[next].next;
         }
@@ -136,7 +142,7 @@ contract SortedPriceList {
     ) internal view returns (uint256 prev, uint256 next) {
         next = head;
         prev = 0;
-        while (next != 0 && nodes[next].votes > votes) {
+        while (next != 0 && nodes[next].votes >= votes) {
             prev = next;
             next = nodes[next].next;
         }
@@ -181,5 +187,12 @@ contract SortedPriceList {
 
         if (n.next == 0) tail = n.prev;
         else nodes[n.next].prev = n.prev;
+    }
+
+    function getNode(
+        uint256 price
+    ) public view returns (uint256 prev, uint256 next) {
+        prev = nodes[price].prev;
+        next = nodes[price].next;
     }
 }
